@@ -9,7 +9,7 @@ class CrawlRepository:
     def create_job(db: Session, project_id: int):
         job = models.CrawlJob(
             project_id=project_id,
-            status=models.CrawlStatus.pending,
+            status=models.CrawlStatus.pending.value,
             started_at=datetime.utcnow(),
         )
         db.add(job)
@@ -18,14 +18,16 @@ class CrawlRepository:
         return job
 
     @staticmethod
-    def update_status(db: Session, job_id: int, status, error_message=None):
+    def update_status(db: Session, job_id: int, status: models.CrawlStatus, error_message=None):
         job = db.query(models.CrawlJob).filter(models.CrawlJob.id == job_id).first()
         if not job:
             return None
 
-        job.status = status
+        job.status = status.value
+
         if status in [models.CrawlStatus.success, models.CrawlStatus.failed]:
             job.finished_at = datetime.utcnow()
+
         if error_message:
             job.error_message = error_message
 

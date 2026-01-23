@@ -1,20 +1,11 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime
-from sqlalchemy.orm import relationship
-from datetime import datetime
-
+from sqlalchemy.sql import func
 from app.database.base import Base
-
 
 class ResearchProject(Base):
     __tablename__ = "research_projects"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
-    description = Column(Text)
-    company_id = Column(Integer, nullable=True)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relations
-    reports = relationship("Report", backref="project")
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
