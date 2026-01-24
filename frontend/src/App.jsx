@@ -36,7 +36,7 @@ function App() {
   };
 
   // ------------------------
-  // Generate report (OFFLINE OLLAMA)
+  // Generate report (FAST)
   // ------------------------
   const generateReport = async (project) => {
     setSelectedProject(project);
@@ -46,21 +46,32 @@ function App() {
     setQuestion("");
 
     try {
-      console.log("🧠 Generating research using Ollama for:", project.title);
-
-      // 1. Generate report
       await api.post(`/projects/${project.id}/generate_simple_report`);
-
-      console.log("📝 Report generated");
-
-      // 2. Load report
       const res = await api.get(`/projects/${project.id}/report`);
-
+      console.log("📄 Report length:", res.data?.full_content?.length);
       setReport(res.data);
-
     } catch (err) {
-      console.error("❌ Error generating report:", err);
+      console.error("❌ Error:", err);
       alert("Failed to generate report. Check backend logs.");
+    }
+
+    setLoading(false);
+  };
+
+  // ------------------------
+  // Expand to IEEE
+  // ------------------------
+  const expandToIEEE = async () => {
+    if (!selectedProject) return;
+
+    setLoading(true);
+
+    try {
+      await api.post(`/projects/${selectedProject.id}/expand_to_ieee`);
+      const res = await api.get(`/projects/${selectedProject.id}/report`);
+      setReport(res.data);
+    } catch (err) {
+      alert("Failed to expand to IEEE format");
     }
 
     setLoading(false);
@@ -79,11 +90,9 @@ function App() {
       const res = await api.post(
         `/projects/${selectedProject.id}/ask_from_report?question=${encodeURIComponent(question)}`
       );
-
       setAnswer(res.data.answer);
     } catch (err) {
-      console.error("❌ Error asking question:", err);
-      alert("Failed to ask question.");
+      alert("Failed to ask question");
     }
 
     setAsking(false);
@@ -93,10 +102,9 @@ function App() {
   // UI
   // ------------------------
   return (
-    <div style={{ padding: 20, fontFamily: "Arial", maxWidth: 1000, margin: "auto" }}>
-      <h1>AutoResearch Pro (Offline Ollama)</h1>
+    <div style={{ padding: 20, fontFamily: "Arial", maxWidth: 1100, margin: "auto" }}>
+      <h1>AutoResearch Pro (Offline)</h1>
 
-      {/* ---------------- Create Project ---------------- */}
       <h2>Create Research Topic</h2>
       <input
         value={newTitle}
@@ -110,28 +118,23 @@ function App() {
 
       <hr />
 
-      {/* ---------------- Projects List ---------------- */}
       <h2>Projects</h2>
       <ul>
         {projects.map((p) => (
           <li key={p.id} style={{ marginBottom: 10 }}>
             <b>{p.title}</b>{" "}
-            <button onClick={() => generateReport(p)}>
-              Generate Research
-            </button>
+            <button onClick={() => generateReport(p)}>Generate Report</button>
           </li>
         ))}
       </ul>
 
       <hr />
 
-      {/* ---------------- Loading ---------------- */}
-      {loading && <p>⏳ Generating research using local Ollama... Please wait.</p>}
+      {loading && <p>⏳ Working... Please wait.</p>}
 
-      {/* ---------------- Report Viewer ---------------- */}
       {report && (
         <div>
-          <h2>📄 Report: {report.title}</h2>
+          <h2>📄 {report.title}</h2>
 
           <div
             style={{
@@ -141,13 +144,21 @@ function App() {
               color: "#ffffff",
               borderRadius: 8,
               whiteSpace: "pre-wrap",
+              maxHeight: "70vh",
+              overflowY: "auto",
             }}
           >
-            {report.content || report.full_content}
+            {report.full_content && report.full_content.trim().length > 0
+              ? report.full_content
+              : "❌ Report is empty"}
           </div>
 
-          {/* ---------------- Q&A ---------------- */}
+          <button onClick={expandToIEEE}>
+            🔥 Convert to IEEE Research Paper
+          </button>
+
           <hr />
+
           <h2>❓ Ask from this Report</h2>
 
           <input

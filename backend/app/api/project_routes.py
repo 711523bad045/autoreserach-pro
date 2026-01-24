@@ -55,9 +55,22 @@ def generate_simple_report(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     service = ReportService(db)
-
-    # Use project title as topic
     report = service.generate_simple_report(project_id)
+
+    return {
+        "status": "ok",
+        "report_id": report.id
+    }
+
+
+@router.post("/{project_id}/expand_to_ieee")
+def expand_to_ieee(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(ResearchProject).filter(ResearchProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    service = ReportService(db)
+    report = service.expand_to_ieee(project_id)
 
     return {
         "status": "ok",
@@ -72,10 +85,12 @@ def get_report(project_id: int, db: Session = Depends(get_db)):
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
+    # ✅ ALWAYS SAME SHAPE
     return {
         "id": report.id,
         "title": report.title,
-        "content": report.full_content
+        "full_content": report.full_content,
+        "project_id": report.project_id
     }
 
 
