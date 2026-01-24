@@ -11,6 +11,9 @@ class Report(Base):
     full_content = Column(Text)
 
     project_id = Column(Integer, ForeignKey("research_projects.id"))
-    project = relationship("ResearchProject", backref="reports")
 
     created_at = Column(DateTime, server_default=func.now())
+
+    # ✅ Relationships
+    project = relationship("ResearchProject", back_populates="reports")
+    sections = relationship("ReportSection", back_populates="report", cascade="all, delete-orphan")

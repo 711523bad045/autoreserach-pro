@@ -11,4 +11,7 @@ class Source(Base):
     content = Column(Text, nullable=True)
 
     project_id = Column(Integer, ForeignKey("research_projects.id"))
-    project = relationship("ResearchProject", backref="sources")
+
+    # ✅ Relationships
+    project = relationship("ResearchProject", back_populates="sources")
+    chunks = relationship("Chunk", back_populates="source", cascade="all, delete-orphan")

@@ -1,4 +1,5 @@
 from .research_project import ResearchProject
 from .source import Source
-from .report import Report
 from .chunk import Chunk
+from .report import Report
+from .report_section import ReportSection

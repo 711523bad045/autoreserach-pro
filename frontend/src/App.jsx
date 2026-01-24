@@ -30,13 +30,18 @@ function App() {
   // ------------------------
   const createProject = async () => {
     if (!newTitle.trim()) return;
-    await api.post("/projects/", { title: newTitle, description: "" });
+
+    await api.post("/projects/", {
+      title: newTitle,
+      description: "",
+    });
+
     setNewTitle("");
     loadProjects();
   };
 
   // ------------------------
-  // Generate report (FAST)
+  // Generate report
   // ------------------------
   const generateReport = async (project) => {
     setSelectedProject(project);
@@ -47,11 +52,15 @@ function App() {
 
     try {
       await api.post(`/projects/${project.id}/generate_simple_report`);
+
       const res = await api.get(`/projects/${project.id}/report`);
+
+      console.log("📦 API response:", res.data);
       console.log("📄 Report length:", res.data?.full_content?.length);
+
       setReport(res.data);
     } catch (err) {
-      console.error("❌ Error:", err);
+      console.error("❌ Error generating report:", err);
       alert("Failed to generate report. Check backend logs.");
     }
 
@@ -88,7 +97,9 @@ function App() {
 
     try {
       const res = await api.post(
-        `/projects/${selectedProject.id}/ask_from_report?question=${encodeURIComponent(question)}`
+        `/projects/${selectedProject.id}/ask_from_report?question=${encodeURIComponent(
+          question
+        )}`
       );
       setAnswer(res.data.answer);
     } catch (err) {
@@ -102,9 +113,17 @@ function App() {
   // UI
   // ------------------------
   return (
-    <div style={{ padding: 20, fontFamily: "Arial", maxWidth: 1100, margin: "auto" }}>
+    <div
+      style={{
+        padding: 20,
+        fontFamily: "Arial",
+        maxWidth: 1100,
+        margin: "auto",
+      }}
+    >
       <h1>AutoResearch Pro (Offline)</h1>
 
+      {/* Create Project */}
       <h2>Create Research Topic</h2>
       <input
         value={newTitle}
@@ -118,6 +137,7 @@ function App() {
 
       <hr />
 
+      {/* Projects List */}
       <h2>Projects</h2>
       <ul>
         {projects.map((p) => (
@@ -132,6 +152,7 @@ function App() {
 
       {loading && <p>⏳ Working... Please wait.</p>}
 
+      {/* Report Viewer */}
       {report && (
         <div>
           <h2>📄 {report.title}</h2>
@@ -159,6 +180,7 @@ function App() {
 
           <hr />
 
+          {/* Q&A */}
           <h2>❓ Ask from this Report</h2>
 
           <input
@@ -167,7 +189,11 @@ function App() {
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="Ask a question from this report..."
           />
-          <button onClick={askFromReport} disabled={asking} style={{ marginLeft: 10 }}>
+          <button
+            onClick={askFromReport}
+            disabled={asking}
+            style={{ marginLeft: 10 }}
+          >
             Ask
           </button>
 

@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
-from app.database.models import Report, Source, Chunk, ResearchProject
+from sqlalchemy import desc
+
+from app.database.models import Report, Source, Chunk, ResearchProject, ReportSection
 from app.llm.ollama_client import OllamaClient
 from app.services.web_search_service import WebSearchService, WebScraper
 
@@ -10,7 +12,7 @@ class ReportService:
         self.llm = OllamaClient(model="qwen2.5:1.5b")
 
     # =====================================================
-    # STAGE 1 — FAST BRIEF REPORT (DEFAULT)
+    # FAST BRIEF REPORT (REUSE IF EXISTS)
     # =====================================================
     def generate_simple_report(self, project_id: int):
         project = self.db.query(ResearchProject).filter(ResearchProject.id == project_id).first()
@@ -19,161 +21,215 @@ class ReportService:
 
         topic = project.title
 
-        # ♻️ Reuse if already exists
-        existing = self.db.query(Report).filter(Report.project_id == project_id).first()
-        if existing and existing.full_content and len(existing.full_content) > 500:
-            print("♻️ Reusing existing report")
+        # --------------------------------------------
+        # ✅ REUSE EXISTING REPORT IF PRESENT
+        # --------------------------------------------
+        existing = (
+            self.db.query(Report)
+            .filter(Report.project_id == project_id)
+            .order_by(desc(Report.id))
+            .first()
+        )
+
+        if existing and existing.full_content and len(existing.full_content) > 300:
+            print("♻️ Reusing existing report from DB")
             return existing
 
-        print("🧠 Generating FAST brief report for:", topic)
+        print("🧠 No existing report found. Generating new report for:", topic)
 
-        # -------------------------------------------------
-        # 1. Search
-        # -------------------------------------------------
+        # ----------------------------------------
+        # Web search
+        # ----------------------------------------
         urls = WebSearchService.search(topic, max_results=5)
-
-        # If nothing found → still continue using topic only
         if not urls:
-            print("⚠️ No web sources found, generating general report")
+            raise Exception("❌ Web search returned ZERO urls.")
 
-        # -------------------------------------------------
-        # 2. Scrape (limit!)
-        # -------------------------------------------------
-        all_text = []
+        all_chunks = []
         source_urls = []
 
-        for url in urls[:3]:  # only 3 pages for speed
+        # ----------------------------------------
+        # Scrape + Save Sources + Save Chunks
+        # ----------------------------------------
+        for url in urls:
             title, content = WebScraper.scrape(url)
             if not content:
                 continue
 
+            src = Source(
+                project_id=project_id,
+                url=url,
+                title=title,
+                content=content
+            )
+            self.db.add(src)
+            self.db.commit()
+            self.db.refresh(src)
+
             source_urls.append(url)
-            all_text.append(content[:4000])  # limit size
 
-        raw_material = "\n\n".join(all_text[:3])
+            words = content.split()
+            chunk_size = 350
+            chunk_index = 0
 
-        # -------------------------------------------------
-        # 3. FAST PROMPT (ONE CALL ONLY)
-        # -------------------------------------------------
+            for i in range(0, len(words), chunk_size):
+                chunk_text = " ".join(words[i:i + chunk_size])
+                if len(chunk_text) < 300:
+                    continue
+
+                chunk = Chunk(
+                    source_id=src.id,
+                    page_url=url,
+                    content=chunk_text,
+                    chunk_index=chunk_index
+                )
+                self.db.add(chunk)
+
+                all_chunks.append(chunk_text)
+                chunk_index += 1
+
+            self.db.commit()
+
+        if len(all_chunks) < 3:
+            raise Exception("❌ Scraping failed or too little content.")
+
+        print(f"📚 Collected {len(all_chunks)} chunks")
+
+        # ----------------------------------------
+        # Build SMALL context
+        # ----------------------------------------
+        context = "\n\n".join(all_chunks[:5])
+
+        # ----------------------------------------
+        # FAST SINGLE PASS PROMPT
+        # ----------------------------------------
         prompt = f"""
 You are a professional technical writer.
 
-Write a CLEAR, WELL-STRUCTURED, INFORMATIVE overview report about:
+Topic: {topic}
 
-TOPIC: {topic}
+Using the information below, write a CLEAR, WELL-STRUCTURED, MEDIUM-LENGTH report.
 
-Requirements:
-- 800 to 1200 words
-- Simple professional language
-- Structured with headings:
-  Introduction
-  Background
-  Key Concepts
-  Applications
-  Challenges
-  Future Scope
-  Conclusion
-- Do NOT mention Wikipedia or sources inside text
+RULES:
+- 6 to 8 sections
+- Each section 2–4 paragraphs
+- Use clear headings
+- Factual, structured
+- Not extremely long
+- No academic fluff
 
-Use the following material ONLY as background reference (you may paraphrase and summarize):
+RAW MATERIAL:
+{context}
 
-{raw_material}
-
-Now write the full report.
+Produce the full report now.
 """
 
-        print("✍️ Generating brief report...")
-        text = self.llm.generate(prompt)
+        print("✍️ Generating FAST report...")
+        final_text = self.llm.generate(prompt)
 
-        if not text or len(text.strip()) < 300:
-            text = f"# {topic}\n\nThis topic does not have enough available information online. Please try a different topic."
+        if not final_text or len(final_text.strip()) < 300:
+            final_text = f"# {topic}\n\n" + "\n\n".join(all_chunks[:5])
 
-        # -------------------------------------------------
-        # 4. Append Sources Section
-        # -------------------------------------------------
+        # ----------------------------------------
+        # Append Sources
+        # ----------------------------------------
         if source_urls:
-            text += "\n\n---\n\n## Sources\n"
-            text += "This report was prepared using information summarized from the following sources:\n\n"
+            final_text += "\n\n---\n\n## Sources\n"
             for u in source_urls:
-                text += f"- {u}\n"
+                final_text += f"- {u}\n"
 
-        # -------------------------------------------------
-        # 5. Save
-        # -------------------------------------------------
+        # ----------------------------------------
+        # Save report
+        # ----------------------------------------
         report = Report(
             project_id=project_id,
-            title=f"Report: {topic}",
-            full_content=text
+            title=f"Research: {topic}",
+            full_content=final_text
         )
+
         self.db.add(report)
         self.db.commit()
         self.db.refresh(report)
-        return report
 
-    # =====================================================
-    # STAGE 2 — EXPAND TO IEEE PAPER
-    # =====================================================
-    def expand_to_ieee(self, project_id: int):
-        report = self.db.query(Report).filter(Report.project_id == project_id).first()
-        if not report:
-            raise Exception("No base report found")
-
-        print("📄 Expanding to IEEE research paper...")
-
-        prompt = f"""
-You are a professional academic research writer.
-
-Convert the following technical report into a FULL IEEE STYLE research paper.
-
-Requirements:
-- 3000 to 4000 words
-- Formal academic tone
-- Add:
-  Abstract
-  Keywords
-  Introduction
-  Literature Review
-  Methodology
-  Discussion
-  Applications
-  Challenges
-  Future Work
-  Conclusion
-- Add in-text citation style like: [1], [2], [3]
-- Add References section at the end
-- Do NOT invent sources
-- Use the report content as the main material
-
-REPORT:
-{report.full_content}
-
-Now generate the full IEEE formatted paper.
-"""
-
-        long_text = self.llm.generate(prompt)
-
-        if long_text and len(long_text) > len(report.full_content):
-            report.full_content = long_text
-            report.title = report.title.replace("Report:", "IEEE Paper:")
-            self.db.commit()
-            self.db.refresh(report)
+        print("✅ Report saved to DB")
 
         return report
 
     # =====================================================
-    # Q&A
+    # ASK FROM REPORT
     # =====================================================
     def ask_from_report(self, project_id: int, question: str):
-        report = self.db.query(Report).filter(Report.project_id == project_id).first()
+        report = (
+            self.db.query(Report)
+            .filter(Report.project_id == project_id)
+            .order_by(desc(Report.id))
+            .first()
+        )
+
         if not report:
             return "No report found."
 
         prompt = f"""
-Answer using ONLY this document:
+Answer using ONLY the report below.
 
+Report:
 {report.full_content}
 
-Question: {question}
+Question:
+{question}
+"""
+        return self.llm.generate(prompt)
+
+    # =====================================================
+    # EXPAND TO IEEE (MODIFY SAME REPORT)
+    # =====================================================
+    def expand_to_ieee(self, project_id: int):
+        report = (
+            self.db.query(Report)
+            .filter(Report.project_id == project_id)
+            .order_by(desc(Report.id))
+            .first()
+        )
+
+        if not report or not report.full_content:
+            raise Exception("No base report found to expand.")
+
+        print("📄 Converting report to IEEE format...")
+
+        prompt = f"""
+You are an academic research paper formatter.
+
+Convert the following report into a SHORT BUT PROPER IEEE STYLE research paper with:
+
+- Title
+- Abstract
+- Keywords
+- Introduction
+- Methodology
+- Results and Discussion
+- Conclusion
+- References
+
+Rules:
+- Formal academic tone
+- Structured headings
+- Do not remove information
+- Keep it concise
+
+Base Report:
+{report.full_content}
 """
 
-        return self.llm.generate(prompt)
+        ieee_text = self.llm.generate(prompt)
+
+        if not ieee_text or len(ieee_text.strip()) < 300:
+            raise Exception("IEEE conversion failed.")
+
+        report.title = f"IEEE Paper: {report.title.replace('Research:', '').strip()}"
+        report.full_content = ieee_text
+
+        self.db.commit()
+        self.db.refresh(report)
+
+        print("✅ IEEE conversion complete")
+
+        return report
