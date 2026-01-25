@@ -17,6 +17,9 @@ function App() {
   const [sections, setSections] = useState([]);
   const [showSections, setShowSections] = useState(false);
 
+  const [sources, setSources] = useState([]);
+  const [ieeeReport, setIeeeReport] = useState(null);
+
   // ------------------------
   // Load projects
   // ------------------------
@@ -28,6 +31,29 @@ function App() {
   useEffect(() => {
     loadProjects();
   }, []);
+
+  // ------------------------
+  // Load sources from DB
+  // ------------------------
+  const loadSources = async (projectId) => {
+    try {
+      const res = await api.get(`/projects/${projectId}/sources`);
+      setSources(res.data);
+    } catch (err) {
+      console.error("Failed to load sources");
+      setSources([]);
+    }
+  };
+  const loadIEEEReport = async () => {
+  if (!selectedProject) return;
+
+  try {
+    const res = await api.get(`/projects/${selectedProject.id}/ieee`);
+    setIeeeReport(res.data);
+  } catch (err) {
+    alert("No IEEE report found. Generate it first.");
+  }
+};
 
   // ------------------------
   // Create project
@@ -48,28 +74,43 @@ function App() {
   // Generate report
   // ------------------------
   const generateReport = async (project) => {
-    if (loading) return;
+  if (loading) return;
 
-    setSelectedProject(project);
-    setLoading(true);
-    setLoadingText("⏳ Generating report...");
-    setReport(null);
-    setSections([]);
-    setShowSections(false);
-    setAnswer("");
-    setQuestion("");
+  setSelectedProject(project);
+  setLoading(true);
+  setLoadingText("⏳ Generating report (live)...");
+  setReport(null);
+  setIeeeReport(null);
+  setSections([]);
+  setShowSections(false);
+  setAnswer("");
+  setQuestion("");
+  setSources([]);
 
-    try {
-      await api.post(`/projects/${project.id}/generate_simple_report`);
-      const res = await api.get(`/projects/${project.id}/report`);
-      setReport(res.data);
-    } catch (err) {
-      alert("Failed to generate report");
-    }
+  let poller = null;
 
-    setLoading(false);
-    setLoadingText("");
-  };
+  try {
+    // 🔁 Start polling immediately
+    poller = startPollingReport(project.id);
+
+    // 🔥 This call will take LONG time (20–40 mins)
+    await api.post(`/projects/${project.id}/generate_simple_report`);
+
+    // Final fetch (just in case)
+    const res = await api.get(`/projects/${project.id}/report`);
+    setReport(res.data);
+
+    await loadSources(project.id);
+  } catch (err) {
+    alert("Failed to generate report");
+  }
+
+  // 🛑 Stop polling
+  if (poller) clearInterval(poller);
+
+  setLoading(false);
+  setLoadingText("");
+};
 
   // ------------------------
   // Expand to IEEE
@@ -86,6 +127,7 @@ function App() {
       setReport(res.data);
       setSections([]);
       setShowSections(false);
+      await loadSources(selectedProject.id);
     } catch (err) {
       alert("Failed to expand to IEEE format");
     }
@@ -113,6 +155,23 @@ function App() {
     setLoading(false);
     setLoadingText("");
   };
+  // new function 
+  const startPollingReport = (projectId) => {
+  const interval = setInterval(async () => {
+    try {
+      const r = await api.get(`/projects/${projectId}/report`);
+      setReport(r.data);
+    } catch {}
+
+    try {
+      const s = await api.get(`/projects/${projectId}/sources`);
+      setSources(s.data);
+    } catch {}
+  }, 3000); // every 3 seconds
+
+  return interval;
+};
+
 
   // ------------------------
   // Load Sections
@@ -158,8 +217,18 @@ function App() {
     setAsking(false);
   };
 
+  // ------------------------
+  // Download report
+  // ------------------------
+  const downloadReport = (type) => {
+    if (!selectedProject) return;
+
+    const url = `${api.defaults.baseURL}/projects/${selectedProject.id}/download/${type}`;
+    window.open(url, "_blank");
+  };
+
   return (
-    <div style={{ padding: 20, fontFamily: "Arial", maxWidth: 1100, margin: "auto" }}>
+    <div style={{ padding: 20, fontFamily: "Arial", maxWidth: 1200, margin: "auto" }}>
       <h1>AutoResearch Pro</h1>
 
       <h2>Create Research Topic</h2>
@@ -199,19 +268,51 @@ function App() {
         <div>
           <h2>📄 {report.title}</h2>
 
-          <pre
-            style={{
-              background: "#1e1e1e",
-              color: "#fff",
-              padding: 15,
-              maxHeight: "60vh",
-              overflowY: "auto",
-              whiteSpace: "pre-wrap",
-              borderRadius: 8,
-            }}
-          >
-            {report.full_content}
-          </pre>
+          <div style={{ display: "grid", gridTemplateColumns: "3fr 1fr", gap: 20 }}>
+            {/* REPORT */}
+            <pre
+              style={{
+                background: "#1e1e1e",
+                color: "#fff",
+                padding: 15,
+                maxHeight: "60vh",
+                overflowY: "auto",
+                whiteSpace: "pre-wrap",
+                borderRadius: 8,
+              }}
+            >
+              {report.full_content}
+            </pre>
+
+            {/* SOURCES */}
+            <div
+              style={{
+                background: "#111",
+                color: "#fff",
+                padding: 15,
+                borderRadius: 8,
+                maxHeight: "60vh",
+                overflowY: "auto",
+              }}
+            >
+              <h3>🔗 Sources</h3>
+
+              {sources.length === 0 && <p style={{ color: "#888" }}>No sources found.</p>}
+
+              {sources.map((s, i) => (
+                <div key={s.id} style={{ marginBottom: 12 }}>
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: "#4da3ff", textDecoration: "none" }}
+                  >
+                    {i + 1}. {s.title || s.url}
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
 
           <br />
 
@@ -225,6 +326,14 @@ function App() {
 
           <button onClick={loadSections} style={{ marginLeft: 10 }} disabled={loading}>
             {loading ? "⏳ Working..." : "📑 View Sections"}
+          </button>
+
+          <button onClick={() => downloadReport("word")} style={{ marginLeft: 10 }} disabled={loading}>
+            ⬇️ Download Word
+          </button>
+
+          <button onClick={() => downloadReport("pdf")} style={{ marginLeft: 10 }} disabled={loading}>
+            ⬇️ Download PDF
           </button>
 
           <hr />
@@ -253,6 +362,9 @@ function App() {
           )}
 
           <hr />
+          <button onClick={loadIEEEReport} style={{ marginLeft: 10 }}>
+            📄 View IEEE Report
+          </button>
 
           <h2>❓ Ask from Report</h2>
           <input
@@ -265,12 +377,34 @@ function App() {
             {asking ? "🤔 Thinking..." : "Ask"}
           </button>
 
-          {answer && (
-            <div style={{ marginTop: 20, padding: 15, background: "#003300", color: "#00ff88", borderRadius: 8 }}>
-              <b>Answer:</b>
-              <p>{answer}</p>
-            </div>
-          )}
+         {answer && (
+  <div style={{ marginTop: 20, padding: 15, background: "#003300", color: "#00ff88", borderRadius: 8 }}>
+    <b>Answer:</b>
+    <p>{answer}</p>
+  </div>
+)}
+
+/* 👇 ADD THIS EXACTLY HERE 👇 */
+
+{ieeeReport && (
+  <div style={{ marginTop: 30 }}>
+    <h2>📘 IEEE Report</h2>
+    <pre
+      style={{
+        background: "#0f172a",
+        color: "#fff",
+        padding: 15,
+        maxHeight: "60vh",
+        overflowY: "auto",
+        whiteSpace: "pre-wrap",
+        borderRadius: 8,
+      }}
+    >
+      {ieeeReport.full_content}
+    </pre>
+  </div>
+)}
+
         </div>
       )}
     </div>

@@ -1,8 +1,9 @@
 import requests
 from typing import List
 
+
 class OllamaClient:
-    def __init__(self, model="qwen2.5:1.5b"):
+    def __init__(self, model="qwen2.5:0.5b"):
         self.model = model
         self.url = "http://localhost:11434/api/generate"
 
@@ -10,12 +11,20 @@ class OllamaClient:
         payload = {
             "model": self.model,
             "prompt": prompt,
-            "stream": False
+            "stream": False,
+            "options": {
+                "temperature": 0.4,
+                "top_p": 0.9,
+                "num_ctx": 2048
+            }
         }
 
-        r = requests.post(self.url, json=payload, timeout=300)
+        # ⏱️ Increased timeout for safety (per section)
+        r = requests.post(self.url, json=payload, timeout=1800)
         r.raise_for_status()
-        return r.json()["response"]
+
+        data = r.json()
+        return data.get("response", "")
 
     def embed(self, text: str) -> List[float]:
         r = requests.post(

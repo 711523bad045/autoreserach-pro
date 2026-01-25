@@ -11,6 +11,13 @@ from app.services.report_service import ReportService
 from app.database.models import ResearchProject, Report
 from app.database.models import ReportSection
 
+from fastapi.responses import FileResponse
+from app.services.export_service import ExportService
+import os
+
+from app.database.models import Source
+from app.database.models import IEEEReport
+
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
@@ -151,3 +158,74 @@ def get_sections(project_id: int, db: Session = Depends(get_db)):
         for s in sections
     ]
 
+
+
+@router.get("/{project_id}/download/word")
+def download_report_word(project_id: int, db: Session = Depends(get_db)):
+    report = (
+        db.query(Report)
+        .filter(Report.project_id == project_id)
+        .order_by(desc(Report.id))
+        .first()
+    )
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    path = ExportService.export_to_word(report)
+    return FileResponse(path, filename="report.docx", media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
+@router.get("/{project_id}/download/pdf")
+def download_report_pdf(project_id: int, db: Session = Depends(get_db)):
+    report = (
+        db.query(Report)
+        .filter(Report.project_id == project_id)
+        .order_by(desc(Report.id))
+        .first()
+    )
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    path = ExportService.export_to_pdf(report)
+    return FileResponse(path, filename="report.pdf", media_type="application/pdf")
+
+
+@router.get("/{project_id}/sources")
+def get_sources(project_id: int, db: Session = Depends(get_db)):
+    sources = (
+        db.query(Source)
+        .filter(Source.project_id == project_id)
+        .all()
+    )
+
+    return [
+        {
+            "id": s.id,
+            "url": s.url,
+            "title": s.title,
+        }
+        for s in sources
+    ]
+
+
+
+@router.get("/{project_id}/ieee")
+def get_ieee_report(project_id: int, db: Session = Depends(get_db)):
+    ieee = (
+        db.query(IEEEReport)
+        .filter(IEEEReport.project_id == project_id)
+        .order_by(desc(IEEEReport.id))
+        .first()
+    )
+
+    if not ieee:
+        raise HTTPException(status_code=404, detail="IEEE report not found")
+
+    return {
+        "id": ieee.id,
+        "title": ieee.title,
+        "full_content": ieee.full_content,
+        "project_id": ieee.project_id
+    }
