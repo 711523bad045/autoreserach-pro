@@ -10,6 +10,7 @@ class ReportService:
     def __init__(self, db: Session):
         self.db = db
         self.llm = OllamaClient(model="qwen2.5:1.5b")
+        self.qa_llm = OllamaClient(model="qwen2.5:0.5b")
 
     # =====================================================
     # FAST BRIEF REPORT (REUSE IF EXISTS)
@@ -157,27 +158,56 @@ Produce the full report now.
     # =====================================================
     # ASK FROM REPORT
     # =====================================================
+    
+
     def ask_from_report(self, project_id: int, question: str):
-        report = (
-            self.db.query(Report)
-            .filter(Report.project_id == project_id)
-            .order_by(desc(Report.id))
-            .first()
-        )
+            report = (
+                self.db.query(Report)
+                .filter(Report.project_id == project_id)
+                .order_by(desc(Report.id))
+                .first()
+            )
+            if not report:
+                return "No report found."
 
-        if not report:
-            return "No report found."
+            # Get sections from DB (already split)
+            sections = (
+                self.db.query(ReportSection)
+                .filter(ReportSection.report_id == report.id)
+                .all()
+            )
 
-        prompt = f"""
-Answer using ONLY the report below.
+            q = question.lower()
 
-Report:
-{report.full_content}
+            # 🔍 Fast keyword filter
+            relevant = [s.content for s in sections if q in s.content.lower()]
 
-Question:
-{question}
-"""
-        return self.llm.generate(prompt)
+            if not relevant:
+                relevant = [s.content for s in sections[:2]]  # fallback
+
+            context = "\n\n".join(relevant[:3])  # limit context size
+
+            prompt = f"""
+        Answer the question using ONLY the content below.
+
+        Rules:
+        - Answer in 5 to 6 lines only
+        - Be direct
+        - No extra explanation
+        - No markdown
+
+        Content:
+        {context}
+
+        Question:
+        {question}
+        """
+
+            # ⚡ USE SMALL MODEL
+            return self.qa_llm.generate(prompt)
+
+
+
 
     # =====================================================
     # EXPAND TO IEEE (MODIFY SAME REPORT)
@@ -233,3 +263,80 @@ Base Report:
         print("✅ IEEE conversion complete")
 
         return report
+    
+
+
+         
+    # =====================================================
+    # SPLIT REPORT INTO SECTIONS (ON DEMAND)
+    # =====================================================
+    def split_report_into_sections(self, project_id: int):
+        print("⚡ FAST SPLITTER — PURE PYTHON (NO LLM)")
+
+        report = (
+            self.db.query(Report)
+            .filter(Report.project_id == project_id)
+            .order_by(desc(Report.id))
+            .first()
+        )
+
+        if not report or not report.full_content:
+            raise Exception("No report to split.")
+
+        # Clear old sections FAST
+        self.db.query(ReportSection).filter(
+            ReportSection.report_id == report.id
+        ).delete(synchronize_session=False)
+        self.db.commit()
+
+        text = report.full_content
+
+        lines = text.split("\n")
+
+        sections = []
+        current_title = "Introduction"
+        current_content = []
+        order = 1
+
+        for line in lines:
+            line = line.rstrip()
+
+            if line.strip().startswith("##"):
+                if current_content:
+                    sections.append((current_title, "\n".join(current_content).strip()))
+                    current_content = []
+
+                current_title = line.replace("#", "").strip()
+            else:
+                current_content.append(line)
+
+        if current_content:
+            sections.append((current_title, "\n".join(current_content).strip()))
+
+        # Prepare objects
+        objects = []
+        for title, content in sections:
+            if len(content.strip()) < 100:
+                continue
+
+            objects.append(
+                ReportSection(
+                    report_id=report.id,
+                    title=title,
+                    content=content,
+                    order=order,
+                )
+            )
+            order += 1
+
+        # 🚀 BULK INSERT (VERY FAST)
+        if objects:
+            self.db.bulk_save_objects(objects)
+            self.db.commit()
+
+        print(f"✅ Split into {len(objects)} sections")
+
+        return {
+            "sections_created": len(objects)
+        }
+

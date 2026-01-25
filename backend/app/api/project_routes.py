@@ -9,6 +9,7 @@ from app.services.project_service import ProjectService
 from app.services.report_service import ReportService
 
 from app.database.models import ResearchProject, Report
+from app.database.models import ReportSection
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -108,3 +109,45 @@ def ask_from_report(project_id: int, question: str, db: Session = Depends(get_db
         "question": question,
         "answer": answer
     }
+
+
+@router.post("/{project_id}/split_report")
+def split_report(project_id: int, db: Session = Depends(get_db)):
+    service = ReportService(db)
+    result = service.split_report_into_sections(project_id)
+
+    return {
+        "status": "ok",
+        **result
+    }
+
+
+@router.get("/{project_id}/sections")
+def get_sections(project_id: int, db: Session = Depends(get_db)):
+    report = (
+        db.query(Report)
+        .filter(Report.project_id == project_id)
+        .order_by(desc(Report.id))
+        .first()
+    )
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    sections = (
+        db.query(ReportSection)
+        .filter(ReportSection.report_id == report.id)
+        .order_by(ReportSection.order)
+        .all()
+    )
+
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "content": s.content,
+            "order": s.order,
+        }
+        for s in sections
+    ]
+
