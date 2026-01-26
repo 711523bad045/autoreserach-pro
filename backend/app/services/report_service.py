@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+import traceback
+import time
 
 from app.database.models import Report, Source, Chunk, ResearchProject, ReportSection
 from app.database.models import IEEEReport
@@ -11,28 +13,26 @@ class ReportService:
     def __init__(self, db: Session):
         self.db = db
 
-        # ⚡ FAST model for normal report
+        # ⚡ FAST model for everything
         self.llm = OllamaClient(model="qwen2.5:0.5b")
 
-        # 🧠 Better model ONLY for IEEE
-        self.ieee_llm = OllamaClient(model="qwen2.5:1.5b")
+        # ⚡ FAST model for IEEE (changed from 1.5b to 0.5b for speed)
+        self.ieee_llm = OllamaClient(model="qwen2.5:0.5b")
 
         # ⚡ FAST model for Q&A
         self.qa_llm = OllamaClient(model="qwen2.5:0.5b")
 
-    # =====================================================
-    # LONG NORMAL REPORT (10k–15k words)
-    # =====================================================
     def generate_simple_report(self, project_id: int):
-        project = self.db.query(ResearchProject).filter(ResearchProject.id == project_id).first()
+        project = self.db.query(ResearchProject).filter(
+            ResearchProject.id == project_id
+        ).first()
+        
         if not project:
             raise Exception("Project not found")
 
         topic = project.title
 
-        # --------------------------------------------
-        # ✅ REUSE EXISTING NORMAL REPORT
-        # --------------------------------------------
+        # Check for existing report
         existing = (
             self.db.query(Report)
             .filter(Report.project_id == project_id)
@@ -40,11 +40,11 @@ class ReportService:
             .first()
         )
 
-        if existing and existing.full_content and len(existing.full_content) > 8000:
-            print("♻️ Reusing existing NORMAL long report from DB")
+        if existing and existing.full_content and len(existing.full_content) > 5000:
+            print("♻️ Reusing existing report")
             return existing
 
-        print("🧠 Generating NEW LONG report for:", topic)
+        print("🧠 Generating NEW report for:", topic)
 
         if existing:
             report = existing
@@ -60,162 +60,143 @@ class ReportService:
             self.db.commit()
             self.db.refresh(report)
 
-
-
-        # ----------------------------------------
         # Web search
-        # ----------------------------------------
-        urls = WebSearchService.search(topic, max_results=5)
+        try:
+            urls = WebSearchService.search(topic, max_results=5)
+        except Exception as e:
+            print(f"❌ Web search error: {e}")
+            urls = []
+            
         if not urls:
-            raise Exception("❌ Web search returned ZERO urls.")
+            report.full_content = "❌ No sources found"
+            self.db.commit()
+            raise Exception("❌ No sources found")
 
         all_chunks = []
         source_urls = []
 
-        # ----------------------------------------
-        # Scrape + Save Sources + Save Chunks
-        # ----------------------------------------
+        # Scrape sources
         for url in urls:
-            title, content = WebScraper.scrape(url)
-            if not content:
-                continue
-
-            src = Source(
-                project_id=project_id,
-                url=url,
-                title=title,
-                content=content
-            )
-            self.db.add(src)
-            self.db.commit()
-            self.db.refresh(src)
-
-            source_urls.append(url)
-
-            words = content.split()
-            chunk_size = 350
-            chunk_index = 0
-
-            for i in range(0, len(words), chunk_size):
-                chunk_text = " ".join(words[i:i + chunk_size])
-                if len(chunk_text) < 300:
+            try:
+                title, content = WebScraper.scrape(url)
+                if not content or len(content) < 1000:
                     continue
 
-                chunk = Chunk(
-                    source_id=src.id,
-                    page_url=url,
-                    content=chunk_text,
-                    chunk_index=chunk_index
+                src = Source(
+                    project_id=project_id,
+                    url=url,
+                    title=title,
+                    content=content
                 )
-                self.db.add(chunk)
-                all_chunks.append(chunk_text)
-                chunk_index += 1
+                self.db.add(src)
+                self.db.commit()
+                self.db.refresh(src)
 
-            self.db.commit()
+                source_urls.append(url)
+
+                words = content.split()
+                chunk_size = 350
+                chunk_index = 0
+
+                for i in range(0, len(words), chunk_size):
+                    chunk_text = " ".join(words[i:i + chunk_size])
+                    if len(chunk_text) < 300:
+                        continue
+
+                    chunk = Chunk(
+                        source_id=src.id,
+                        page_url=url,
+                        content=chunk_text,
+                        chunk_index=chunk_index
+                    )
+                    self.db.add(chunk)
+                    all_chunks.append(chunk_text)
+                    chunk_index += 1
+
+                self.db.commit()
+                
+            except Exception as e:
+                print(f"⚠️ Error scraping {url}: {e}")
+                continue
 
         if len(all_chunks) < 3:
-            raise Exception("❌ Scraping failed or too little content.")
+            raise Exception("❌ Too little content")
 
         print(f"📚 Collected {len(all_chunks)} chunks")
 
-        context = "\n\n".join(all_chunks[:4])
-
-        # ----------------------------------------
-        # Section plan (≈ 11k–13k words total)
-        # ----------------------------------------
+        # ✅ REDUCED SECTION SIZES FOR SPEED
         sections_plan = [
-            ("Introduction", 2000),
-            ("Background", 2000),
-            ("Core Concepts", 2000),
-            ("Architecture / Working", 2000),
-            ("Applications", 1500),
-            ("Advantages and Limitations", 1500),
-            ("Conclusion", 1000),
+            ("Introduction", 300),
+            ("Background", 400),
+            ("Core Concepts", 500),
+            ("Architecture and Working", 500),
+            ("Applications", 400),
+            ("Advantages and Limitations", 400),
+            ("Conclusion", 300),
         ]
 
-        # ----------------------------------------
-        # Create EMPTY report first (for live UI)
-        # ----------------------------------------
-        # reuse existing report object
         full_text = f"# {topic}\n\n"
         report.full_content = full_text
         self.db.commit()
 
-
-        # ----------------------------------------
-        # Generate section by section
-        # ----------------------------------------
-        for section_title, target_words in sections_plan:
-            print(f"🧠 Generating section: {section_title}")
-
-            section_prompt = f"""
-You are writing a VERY DETAILED research paper.
-
-Topic: {topic}
-
-Now write ONLY this section:
-
-{section_title}
-
-Rules:
-- Write around {target_words} words
-- Very detailed explanation
-- Use paragraphs and subheadings
-- Formal but simple English
-- Do not summarize
-- Do not write other sections
-- Only write this section
-
-Use this reference information:
-{context}
-"""
-
-            section_text = self.llm.generate(section_prompt)
-
-            if not section_text or len(section_text.strip()) < 500:
-                section_text = f"(Fallback content)\n\n{context}"
-
-            full_text += f"\n\n## {section_title}\n\n{section_text}\n"
-
-            # ✅ SAVE PROGRESS FOR UI
+        # Generate sections
+        for idx, (section_title, target_words) in enumerate(sections_plan):
+            print(f"\n🧠 [{idx+1}/{len(sections_plan)}] {section_title}")
+            
+            # Show progress
+            full_text += f"\n## {section_title}\n\n⏳ Generating...\n"
             report.full_content = full_text
             self.db.commit()
 
-            print(f"✅ Finished: {section_title} | Total chars: {len(full_text)}")
+            # Varied context
+            chunk_start = (idx * 3) % len(all_chunks)
+            chunk_end = min(chunk_start + 4, len(all_chunks))
+            context = "\n\n".join(all_chunks[chunk_start:chunk_end])
 
-        # ----------------------------------------
-        # Append references
-        # ----------------------------------------
+            prompt = f"""Write a {target_words}-word section about {section_title} for a research paper on {topic}.
+
+Be concise and clear. Use this reference:
+{context[:1500]}
+
+Write {section_title}:"""
+
+            try:
+                start = time.time()
+                section_text = self.llm.generate(prompt)
+                elapsed = time.time() - start
+                
+                print(f"   ✓ Done in {elapsed:.1f}s")
+                
+            except Exception as e:
+                print(f"   ✗ Error: {e}")
+                section_text = f"{context[:1000]}"
+
+            if not section_text or len(section_text.strip()) < 200:
+                section_text = f"{context[:1000]}"
+
+            # Replace progress indicator with content
+            full_text = full_text.replace(
+                f"\n## {section_title}\n\n⏳ Generating...\n",
+                f"\n## {section_title}\n\n{section_text}\n"
+            )
+
+            report.full_content = full_text
+            self.db.commit()
+
+        # Add references
         if source_urls:
-            full_text += "\n\n---\n\n## References\n"
-            for u in source_urls:
-                full_text += f"- {u}\n"
+            full_text += "\n\n---\n\n## References\n\n"
+            for idx, u in enumerate(source_urls, 1):
+                full_text += f"{idx}. {u}\n"
 
-        # ----------------------------------------
-        # Final save
-        # ----------------------------------------
         report.full_content = full_text
         self.db.commit()
         self.db.refresh(report)
 
-        print("✅ LONG Normal report fully saved to DB")
-
-        # ----------------------------------------
-        # 🔁 AUTO GENERATE IEEE
-        # ----------------------------------------
-        print("🔁 Auto generating IEEE version...")
-        try:
-            print("🔁 Auto generating IEEE version...")
-            self.expand_to_ieee(project_id)
-        except Exception as e:
-            print("⚠️ IEEE generation failed, skipping:", e)
-
+        print(f"\n✅ Complete: {len(full_text)} chars")
 
         return report
 
-    # =====================================================
-    # ASK FROM REPORT
-    # =====================================================
     def ask_from_report(self, project_id: int, question: str):
         report = (
             self.db.query(Report)
@@ -223,33 +204,27 @@ Use this reference information:
             .order_by(desc(Report.id))
             .first()
         )
-        if not report:
+        
+        if not report or not report.full_content:
             return "No report found."
 
         context = report.full_content[:4000]
 
-        prompt = f"""
-Answer the question using ONLY the content below.
+        prompt = f"""Answer in 5 lines using this content:
 
-Rules:
-- Answer in 5 to 6 lines only
-- Be direct
-- No extra explanation
-- No markdown
-
-Content:
 {context}
 
-Question:
-{question}
-"""
+Question: {question}
 
-        return self.qa_llm.generate(prompt)
+Answer:"""
 
-    # =====================================================
-    # GENERATE / LOAD IEEE REPORT
-    # =====================================================
+        try:
+            return self.qa_llm.generate(prompt).strip()
+        except Exception as e:
+            return f"Error: {str(e)}"
+
     def expand_to_ieee(self, project_id: int):
+        print("\n📄 Generating IEEE paper...")
 
         existing = (
             self.db.query(IEEEReport)
@@ -259,7 +234,7 @@ Question:
         )
 
         if existing and existing.full_content and len(existing.full_content) > 1000:
-            print("♻️ Reusing existing IEEE report from DB")
+            print("♻️ Reusing existing IEEE report")
             return existing
 
         report = (
@@ -270,46 +245,57 @@ Question:
         )
 
         if not report or not report.full_content:
-            raise Exception("No normal report found to convert.")
+            raise Exception("No base report found")
 
-        print("📄 Generating IEEE report using 1.5B model...")
+        print("🧠 Converting to IEEE format...")
 
-        prompt = f"""
-You are an academic paper writer.
+        # ⚡ REDUCED INPUT SIZE - only use first 6000 chars instead of 10000
+        prompt = f"""Convert this to IEEE paper format with these sections: Title, Abstract, Keywords, Introduction, Background, Core Concepts, Architecture, Applications, Advantages/Limitations, Conclusion, References.
 
-Convert the following report into a PROPER IEEE STYLE paper with:
+Use formal academic tone. Keep it concise.
 
-- Title
-- Abstract
-- Keywords
-- Introduction
-- Background
-- Core Concepts
-- Architecture / Working
-- Applications
-- Advantages and Limitations
-- Conclusion
-- References
+Base report:
+{report.full_content[:6000]}
 
-Rules:
-- Formal academic tone
-- Expand explanations
-- Do not remove information
-- Do not hallucinate
-- Proper section headings
+Write IEEE paper:"""
 
-Base Report:
-{report.full_content[:12000]}
+        try:
+            start_time = time.time()
+            ieee_text = self.ieee_llm.generate(prompt)
+            elapsed = time.time() - start_time
+            print(f"✅ IEEE generated in {elapsed:.1f}s")
+            
+        except Exception as e:
+            print(f"❌ IEEE generation error: {str(e)}")
+            # Fallback: use original report with IEEE header
+            ieee_text = f"""### Title: {report.title.replace('Research:', '').strip()}
+
+### Abstract:
+{report.full_content[:1000]}
+
+### Keywords:
+Research, Analysis, Technology
+
+{report.full_content}
 """
+            print("⚠️ Using fallback IEEE format")
 
-        ieee_text = self.ieee_llm.generate(prompt)
+        if not ieee_text or len(ieee_text.strip()) < 500:
+            print("⚠️ IEEE output too short, using fallback")
+            ieee_text = f"""### Title: {report.title.replace('Research:', '').strip()}
 
-        if not ieee_text or len(ieee_text.strip()) < 1000:
-            raise Exception("IEEE generation failed.")
+### Abstract:
+{report.full_content[:1000]}
+
+### Keywords:
+Research, Analysis, Technology
+
+{report.full_content}
+"""
 
         ieee = IEEEReport(
             project_id=project_id,
-            title=f"IEEE Paper: {report.title.replace('Research:', '').strip()}",
+            title=f"IEEE: {report.title.replace('Research:', '').strip()}",
             full_content=ieee_text
         )
 
@@ -317,18 +303,13 @@ Base Report:
         self.db.commit()
         self.db.refresh(ieee)
 
-        print("✅ IEEE report saved to DB")
+        print(f"✅ IEEE saved ({len(ieee_text)} chars)")
 
         return ieee
 
-        # =====================================================
-    # SPLIT NORMAL REPORT INTO SECTIONS (ROBUST)
-    # =====================================================
     def split_report_into_sections(self, project_id: int):
+        print("\n✂️ Splitting into sections...")
 
-        print("✂️ Splitting report into sections...")
-
-        # Load latest report
         report = (
             self.db.query(Report)
             .filter(Report.project_id == project_id)
@@ -337,77 +318,58 @@ Base Report:
         )
 
         if not report or not report.full_content:
-            raise Exception("No report found to split.")
+            raise Exception("No report to split")
 
-        # Delete old sections for this report
         self.db.query(ReportSection).filter(
             ReportSection.report_id == report.id
         ).delete()
         self.db.commit()
 
-        text = report.full_content
-        lines = text.split("\n")
-
+        lines = report.full_content.split("\n")
         sections = []
         current_title = None
         current_content = []
         order = 1
 
-        def is_heading(line: str):
+        def is_heading(line):
             line = line.strip()
-            return (
-                line.startswith("# ")
-                or line.startswith("## ")
-                or line.startswith("### ")
-                or line.startswith("#### ")
-            )
+            return line.startswith("#")
 
-        def clean_heading(line: str):
+        def clean_heading(line):
             return line.lstrip("#").strip()
 
         for line in lines:
-            line = line.rstrip()
-
             if is_heading(line):
-                # Save previous section
                 if current_title and current_content:
-                    sections.append(
-                        (current_title, "\n".join(current_content).strip())
-                    )
+                    content_text = "\n".join(current_content).strip()
+                    if len(content_text) >= 200:
+                        sections.append((current_title, content_text, order))
+                        order += 1
 
                 current_title = clean_heading(line)
                 current_content = []
             else:
-                if current_title:
+                if current_title is not None:
                     current_content.append(line)
 
-        # Save last section
         if current_title and current_content:
-            sections.append(
-                (current_title, "\n".join(current_content).strip())
-            )
+            content_text = "\n".join(current_content).strip()
+            if len(content_text) >= 200:
+                sections.append((current_title, content_text, order))
 
-        # Insert into DB
         objects = []
-        for title, content in sections:
-            if len(content.strip()) < 200:
-                continue
-
+        for title, content, order_num in sections:
             obj = ReportSection(
                 report_id=report.id,
                 title=title,
                 content=content,
-                order=order
+                order=order_num
             )
             objects.append(obj)
-            order += 1
 
         if objects:
             self.db.bulk_save_objects(objects)
             self.db.commit()
-
-        print(f"✅ Split into {len(objects)} sections")
+            print(f"✅ Split into {len(objects)} sections")
 
         return {"sections_created": len(objects)}
-
-

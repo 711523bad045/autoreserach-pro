@@ -229,3 +229,34 @@ def get_ieee_report(project_id: int, db: Session = Depends(get_db)):
         "full_content": ieee.full_content,
         "project_id": ieee.project_id
     }
+
+
+@router.delete("/{project_id}")
+def delete_project(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(ResearchProject).filter(ResearchProject.id == project_id).first()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # ---------------------------
+    # Delete child tables first
+    # ---------------------------
+
+    # Delete Reports
+    reports = db.query(Report).filter(Report.project_id == project_id).all()
+    for r in reports:
+        db.query(ReportSection).filter(ReportSection.report_id == r.id).delete()
+
+    db.query(Report).filter(Report.project_id == project_id).delete()
+
+    # Delete Sources
+    db.query(Source).filter(Source.project_id == project_id).delete()
+
+    # Delete IEEE
+    db.query(IEEEReport).filter(IEEEReport.project_id == project_id).delete()
+
+    # Delete Project
+    db.delete(project)
+    db.commit()
+
+    return {"status": "deleted", "project_id": project_id}
