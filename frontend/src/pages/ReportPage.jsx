@@ -51,7 +51,7 @@ function ReportPage() {
     if (loading) return;
 
     setLoading(true);
-    setLoadingText("⏳ Converting to IEEE format...");
+    setLoadingText(" Converting to IEEE format...");
 
     try {
       await api.post(`/projects/${projectId}/expand_to_ieee`);
@@ -68,7 +68,7 @@ function ReportPage() {
     if (loading) return;
 
     setLoading(true);
-    setLoadingText("⏳ Splitting report...");
+    setLoadingText(" Splitting report...");
 
     try {
       await api.post(`/projects/${projectId}/split_report`);
@@ -109,7 +109,7 @@ function ReportPage() {
       <div className="report-container">
         <div className="loading-screen">
           <div className="spinner"></div>
-          <h2>⏳ Generating your research report...</h2>
+          <h2> Generating your research report...</h2>
           <p>This may take a few minutes. Please wait.</p>
         </div>
       </div>
@@ -129,16 +129,16 @@ function ReportPage() {
       {/* Action Buttons */}
       <div className="action-bar">
         <button onClick={expandToIEEE} disabled={loading} className="btn-action">
-          📄 View IEEE Format
+           View IEEE Format
         </button>
         <button onClick={splitAndViewSections} disabled={loading} className="btn-action">
-          📚 View Sections
+           View Sections
         </button>
         <button onClick={() => downloadReport("word")} className="btn-action">
-          ⬇️ Download Word
+          ⬇ Download Word
         </button>
         <button onClick={() => downloadReport("pdf")} className="btn-action">
-          ⬇️ Download PDF
+          ⬇ Download PDF
         </button>
       </div>
 
@@ -152,7 +152,7 @@ function ReportPage() {
       <div className="content-grid">
         {/* Report Content */}
         <div className="report-panel">
-          <h2>📄 Report Content</h2>
+          <h2> Report Content</h2>
           <div className="report-content">
             <pre>{report.full_content}</pre>
           </div>

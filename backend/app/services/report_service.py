@@ -13,13 +13,13 @@ class ReportService:
     def __init__(self, db: Session):
         self.db = db
 
-        # ⚡ FAST model for everything
+        # FAST model for everything
         self.llm = OllamaClient(model="qwen2.5:0.5b")
 
-        # ⚡ FAST model for IEEE (changed from 1.5b to 0.5b for speed)
+        # FAST model for IEEE (changed from 1.5b to 0.5b for speed)
         self.ieee_llm = OllamaClient(model="qwen2.5:0.5b")
 
-        # ⚡ FAST model for Q&A
+        # FAST model for Q&A
         self.qa_llm = OllamaClient(model="qwen2.5:0.5b")
 
     def generate_simple_report(self, project_id: int):
@@ -41,20 +41,20 @@ class ReportService:
         )
 
         if existing and existing.full_content and len(existing.full_content) > 5000:
-            print("♻️ Reusing existing report")
+            print("Reusing existing report")
             return existing
 
-        print("🧠 Generating NEW report for:", topic)
+        print("Generating NEW report for:", topic)
 
         if existing:
             report = existing
-            report.full_content = "⏳ Preparing sources...\n"
+            report.full_content = " Preparing sources...\n"
             self.db.commit()
         else:
             report = Report(
                 project_id=project_id,
                 title=f"Research: {topic}",
-                full_content="⏳ Preparing sources...\n"
+                full_content=" Preparing sources...\n"
             )
             self.db.add(report)
             self.db.commit()
@@ -64,13 +64,13 @@ class ReportService:
         try:
             urls = WebSearchService.search(topic, max_results=5)
         except Exception as e:
-            print(f"❌ Web search error: {e}")
+            print(f" Web search error: {e}")
             urls = []
             
         if not urls:
-            report.full_content = "❌ No sources found"
+            report.full_content = " No sources found"
             self.db.commit()
-            raise Exception("❌ No sources found")
+            raise Exception("No sources found")
 
         all_chunks = []
         source_urls = []
@@ -120,11 +120,11 @@ class ReportService:
                 continue
 
         if len(all_chunks) < 3:
-            raise Exception("❌ Too little content")
+            raise Exception(" Too little content")
 
-        print(f"📚 Collected {len(all_chunks)} chunks")
+        print(f" Collected {len(all_chunks)} chunks")
 
-        # ✅ REDUCED SECTION SIZES FOR SPEED
+        #  REDUCED SECTION SIZES FOR SPEED
         sections_plan = [
             ("Introduction", 300),
             ("Background", 400),
@@ -141,10 +141,10 @@ class ReportService:
 
         # Generate sections
         for idx, (section_title, target_words) in enumerate(sections_plan):
-            print(f"\n🧠 [{idx+1}/{len(sections_plan)}] {section_title}")
+            print(f"\n [{idx+1}/{len(sections_plan)}] {section_title}")
             
             # Show progress
-            full_text += f"\n## {section_title}\n\n⏳ Generating...\n"
+            full_text += f"\n## {section_title}\n\n Generating...\n"
             report.full_content = full_text
             self.db.commit()
 
@@ -176,7 +176,7 @@ Write {section_title}:"""
 
             # Replace progress indicator with content
             full_text = full_text.replace(
-                f"\n## {section_title}\n\n⏳ Generating...\n",
+                f"\n## {section_title}\n\n Generating...\n",
                 f"\n## {section_title}\n\n{section_text}\n"
             )
 
@@ -193,7 +193,7 @@ Write {section_title}:"""
         self.db.commit()
         self.db.refresh(report)
 
-        print(f"\n✅ Complete: {len(full_text)} chars")
+        print(f"\n Complete: {len(full_text)} chars")
 
         return report
 
@@ -224,7 +224,7 @@ Answer:"""
             return f"Error: {str(e)}"
 
     def expand_to_ieee(self, project_id: int):
-        print("\n📄 Generating IEEE paper...")
+        print("\n Generating IEEE paper...")
 
         existing = (
             self.db.query(IEEEReport)
@@ -234,7 +234,7 @@ Answer:"""
         )
 
         if existing and existing.full_content and len(existing.full_content) > 1000:
-            print("♻️ Reusing existing IEEE report")
+            print(" Reusing existing IEEE report")
             return existing
 
         report = (
@@ -247,9 +247,9 @@ Answer:"""
         if not report or not report.full_content:
             raise Exception("No base report found")
 
-        print("🧠 Converting to IEEE format...")
+        print(" Converting to IEEE format...")
 
-        # ⚡ REDUCED INPUT SIZE - only use first 6000 chars instead of 10000
+        #  REDUCED INPUT SIZE - only use first 6000 chars instead of 10000
         prompt = f"""Convert this to IEEE paper format with these sections: Title, Abstract, Keywords, Introduction, Background, Core Concepts, Architecture, Applications, Advantages/Limitations, Conclusion, References.
 
 Use formal academic tone. Keep it concise.
@@ -263,10 +263,10 @@ Write IEEE paper:"""
             start_time = time.time()
             ieee_text = self.ieee_llm.generate(prompt)
             elapsed = time.time() - start_time
-            print(f"✅ IEEE generated in {elapsed:.1f}s")
+            print(f" IEEE generated in {elapsed:.1f}s")
             
         except Exception as e:
-            print(f"❌ IEEE generation error: {str(e)}")
+            print(f" IEEE generation error: {str(e)}")
             # Fallback: use original report with IEEE header
             ieee_text = f"""### Title: {report.title.replace('Research:', '').strip()}
 
@@ -278,10 +278,10 @@ Research, Analysis, Technology
 
 {report.full_content}
 """
-            print("⚠️ Using fallback IEEE format")
+            print(" Using fallback IEEE format")
 
         if not ieee_text or len(ieee_text.strip()) < 500:
-            print("⚠️ IEEE output too short, using fallback")
+            print(" IEEE output too short, using fallback")
             ieee_text = f"""### Title: {report.title.replace('Research:', '').strip()}
 
 ### Abstract:
@@ -303,12 +303,12 @@ Research, Analysis, Technology
         self.db.commit()
         self.db.refresh(ieee)
 
-        print(f"✅ IEEE saved ({len(ieee_text)} chars)")
+        print(f" IEEE saved ({len(ieee_text)} chars)")
 
         return ieee
 
     def split_report_into_sections(self, project_id: int):
-        print("\n✂️ Splitting into sections...")
+        print("\n Splitting into sections...")
 
         report = (
             self.db.query(Report)
@@ -370,6 +370,6 @@ Research, Analysis, Technology
         if objects:
             self.db.bulk_save_objects(objects)
             self.db.commit()
-            print(f"✅ Split into {len(objects)} sections")
+            print(f" Split into {len(objects)} sections")
 
         return {"sections_created": len(objects)}

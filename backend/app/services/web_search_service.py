@@ -5,7 +5,7 @@ import urllib.parse
 class WebSearchService:
     @staticmethod
     def search(query: str, max_results: int = 5):
-        print("🔎 Searching Wikipedia for:", query)
+        print(" Searching Wikipedia for:", query)
 
         search_url = "https://en.wikipedia.org/w/api.php"
         params = {
@@ -22,30 +22,30 @@ class WebSearchService:
         try:
             r = requests.get(search_url, params=params, headers=headers, timeout=20)
 
-            print("🌐 Wikipedia status code:", r.status_code)
+            print(" Wikipedia status code:", r.status_code)
 
             if r.status_code != 200:
-                print("❌ Wikipedia HTTP error")
+                print(" Wikipedia HTTP error")
                 print(r.text[:500])
                 return []
 
             # DEBUG: check what we actually got
             if not r.text.strip().startswith("{"):
-                print("❌ Wikipedia returned non-JSON content:")
+                print(" Wikipedia returned non-JSON content:")
                 print(r.text[:500])
                 return []
 
             data = r.json()
 
             if "query" not in data or "search" not in data["query"]:
-                print("❌ Wikipedia JSON has no search results")
+                print(" Wikipedia JSON has no search results")
                 print(data)
                 return []
 
             results = data["query"]["search"]
 
             if not results:
-                print("❌ No Wikipedia pages found")
+                print(" No Wikipedia pages found")
                 return []
 
             urls = []
@@ -55,14 +55,14 @@ class WebSearchService:
                 page_url = f"https://en.wikipedia.org/wiki/{title_encoded}"
                 urls.append(page_url)
 
-            print("✅ Found URLs:")
+            print(" Found URLs:")
             for u in urls:
                 print("   ", u)
 
             return urls
 
         except Exception as e:
-            print("❌ Wikipedia search failed with exception:", e)
+            print(" Wikipedia search failed with exception:", e)
             return []
 
 
@@ -70,7 +70,7 @@ class WebScraper:
     @staticmethod
     def scrape(url: str):
         try:
-            print("🌐 Scraping:", url)
+            print(" Scraping:", url)
 
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoResearchBot/1.0"
@@ -87,7 +87,7 @@ class WebScraper:
 
             content = soup.find("div", {"id": "mw-content-text"})
             if not content:
-                print("⚠️ No content div found")
+                print(" No content div found")
                 return url, ""
 
             text = content.get_text(separator=" ")
@@ -99,13 +99,13 @@ class WebScraper:
             title = soup.title.string if soup.title else url
 
             if len(text) < 1500:
-                print("⚠️ Too little content")
+                print(" Too little content")
                 return title, ""
 
-            print("✅ Scraped", len(text), "chars")
+            print(" Scraped", len(text), "chars")
 
             return title, text
 
         except Exception as e:
-            print("❌ Scrape failed:", e)
+            print(" Scrape failed:", e)
             return url, ""

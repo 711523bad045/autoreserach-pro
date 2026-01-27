@@ -63,7 +63,7 @@ function IEEEPage() {
           onClick={() => window.print()}
           className="btn-action"
         >
-          🖨️ Print
+           Print
         </button>
         <button
           onClick={() => {
@@ -72,7 +72,7 @@ function IEEEPage() {
           }}
           className="btn-action"
         >
-          ⬇️ Download PDF
+          ⬇ Download PDF
         </button>
       </div>
     </div>

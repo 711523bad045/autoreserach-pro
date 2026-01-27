@@ -56,7 +56,7 @@ function HomePage() {
 
   const deleteProject = async (projectId, projectTitle) => {
     const confirmDelete = window.confirm(
-      `⚠️ Are you sure you want to delete "${projectTitle}"?\n\nThis action cannot be undone and will remove all associated reports.`
+      ` Are you sure you want to delete "${projectTitle}"?\n\nThis action cannot be undone and will remove all associated reports.`
     );
     
     if (!confirmDelete) return;
@@ -86,7 +86,7 @@ function HomePage() {
       <header className="header">
         <div className="header-content">
           <div className="logo-section">
-            <span className="logo-icon">📚</span>
+            <span className="logo-icon"></span>
             <div>
               <h1>AutoResearch Pro</h1>
               <p className="subtitle">AI-Powered Research Report Generator</p>
@@ -98,7 +98,7 @@ function HomePage() {
       {/* Create New Project */}
       <section className="create-section">
         <div className="section-card">
-          <h2>🚀 Create New Research Topic</h2>
+          <h2> Create New Research Topic</h2>
           <div className="input-group">
             <input
               type="text"
@@ -118,17 +118,17 @@ function HomePage() {
 
       {/* Projects Grid */}
       <section className="projects-section">
-        <h2 className="section-title">📂 Your Research Projects</h2>
+        <h2 className="section-title"> Your Research Projects</h2>
         
         {projects.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📭</div>
+            <div className="empty-icon"></div>
             <h3>No Projects Yet</h3>
             <p>Create your first research topic above to get started!</p>
             <div className="empty-decoration">
-              <span>🚀</span>
-              <span>✨</span>
-              <span>🎯</span>
+              <span></span>
+              <span></span>
+              <span></span>
             </div>
           </div>
         ) : (
@@ -175,7 +175,7 @@ function HomePage() {
                       </>
                     ) : (
                       <>
-                        <span className="btn-icon">🔥</span>
+                        <span className="btn-icon"></span>
                         Generate Report
                       </>
                     )}
@@ -185,7 +185,7 @@ function HomePage() {
                     onClick={() => viewReport(project.id)}
                     className="btn-view"
                   >
-                    <span className="btn-icon">👁️</span>
+                    <span className="btn-icon"></span>
                     View Report
                   </button>
                 </div>

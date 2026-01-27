@@ -12,5 +12,5 @@ class ReportSection(Base):
     content = Column(Text)
     order = Column(Integer)
 
-    # ✅ Relationship
+    # Relationship
     report = relationship("Report", back_populates="sections")

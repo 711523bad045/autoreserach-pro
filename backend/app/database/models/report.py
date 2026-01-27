@@ -14,6 +14,6 @@ class Report(Base):
 
     created_at = Column(DateTime, server_default=func.now())
 
-    # ✅ Relationships
+    # Relationships
     project = relationship("ResearchProject", back_populates="reports")
     sections = relationship("ReportSection", back_populates="report", cascade="all, delete-orphan")

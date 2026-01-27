@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database.session import engine
 from app.database.base import Base
 
-# ✅ IMPORT YOUR ROUTER
+#  IMPORT YOUR ROUTER
 from app.api.project_routes import router as project_router
 
 # Create tables

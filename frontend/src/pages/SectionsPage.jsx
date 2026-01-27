@@ -54,7 +54,7 @@ function SectionsPage() {
       <div className="split-view">
         {/* Left Sidebar - Section List */}
         <div className="sections-sidebar">
-          <h3>📑 Table of Contents</h3>
+          <h3> Table of Contents</h3>
           <div className="sections-list">
             {sections.map((section) => (
               <div

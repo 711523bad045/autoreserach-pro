@@ -19,7 +19,7 @@ class OllamaClient:
             }
         }
 
-        # ⏱️ Increased timeout for safety (per section)
+        # Increased timeout for safety (per section)
         r = requests.post(self.url, json=payload, timeout=180)
         r.raise_for_status()
 

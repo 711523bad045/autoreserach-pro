@@ -28,11 +28,11 @@ class ScrapeService:
             text = "\n\n".join(paragraphs)
 
             if len(text) < 1500:
-                print("⚠️ Too little content from:", url)
+                print(" Too little content from:", url)
                 return ""
 
             return text[:20000]
 
         except Exception as e:
-            print("❌ Scrape failed:", url, e)
+            print(" Scrape failed:", url, e)
             return ""

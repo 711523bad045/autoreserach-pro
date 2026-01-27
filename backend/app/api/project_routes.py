@@ -21,9 +21,7 @@ from app.database.models import IEEEReport
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
-# -------------------------------
 # PROJECTS
-# -------------------------------
 
 @router.post("/")
 def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
@@ -35,9 +33,8 @@ def list_projects(db: Session = Depends(get_db)):
     return ProjectService.list_projects(db)
 
 
-# -------------------------------
+
 # REPORT
-# -------------------------------
 
 @router.post("/{project_id}/generate_simple_report")
 def generate_simple_report(project_id: int, db: Session = Depends(get_db)):
@@ -45,7 +42,7 @@ def generate_simple_report(project_id: int, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # ✅ REUSE EXISTING REPORT IF EXISTS
+    # REUSE EXISTING REPORT IF EXISTS
     existing = (
         db.query(Report)
         .filter(Report.project_id == project_id)
@@ -54,7 +51,7 @@ def generate_simple_report(project_id: int, db: Session = Depends(get_db)):
     )
 
     if existing and existing.full_content and len(existing.full_content) > 300:
-        print("♻️ Reusing existing report")
+        print(" Reusing existing report")
         return {
             "status": "ok",
             "report_id": existing.id,
@@ -92,7 +89,7 @@ def get_report(project_id: int, db: Session = Depends(get_db)):
     report = (
         db.query(Report)
         .filter(Report.project_id == project_id)
-        .order_by(desc(Report.id))  # ✅ Always get latest
+        .order_by(desc(Report.id)) 
         .first()
     )
 
@@ -238,9 +235,9 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # ---------------------------
+
     # Delete child tables first
-    # ---------------------------
+
 
     # Delete Reports
     reports = db.query(Report).filter(Report.project_id == project_id).all()

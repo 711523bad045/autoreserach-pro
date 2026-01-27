@@ -4,9 +4,7 @@ from sqlalchemy.orm import relationship
 from app.database.base import Base
 
 
-# -----------------------------
 # Research Project
-# -----------------------------
 class ResearchProject(Base):
     __tablename__ = "research_projects"
 
@@ -14,9 +12,7 @@ class ResearchProject(Base):
     title = Column(String(255), index=True)
 
 
-# -----------------------------
 # Report (MAIN)
-# -----------------------------
 class Report(Base):
     __tablename__ = "reports"
 
@@ -28,7 +24,7 @@ class Report(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # ✅ PROGRESS TRACKING (MUST BE HERE)
+    # PROGRESS TRACKING (MUST BE HERE)
     progress = Column(Integer, default=0)
     status = Column(String(50), default="idle")
     current_step = Column(String(255), nullable=True)
@@ -36,9 +32,8 @@ class Report(Base):
     sections = relationship("ReportSection", back_populates="report")
 
 
-# -----------------------------
+
 # Report Sections
-# -----------------------------
 class ReportSection(Base):
     __tablename__ = "report_sections"
 
@@ -52,9 +47,7 @@ class ReportSection(Base):
     report = relationship("Report", back_populates="sections")
 
 
-# -----------------------------
 # IEEE Report
-# -----------------------------
 class IEEEReport(Base):
     __tablename__ = "ieee_reports"
 
