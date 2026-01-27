@@ -8,11 +8,13 @@
   *Stores everything in a database
   *Allows asking questions from the generated research
   *Can convert the report into IEEE research paper format
-<img width="1916" height="976" alt="Screenshot 2026-01-27 103847" src="https://github.com/user-attachments/assets/f08f08f7-5a87-4b88-9d29-34ef1a93cc67" />
-<img width="1919" height="976" alt="Screenshot 2026-01-27 103838" src="https://github.com/user-attachments/assets/f5961103-81a2-41c6-8f25-3150fb8323f4" /><img width="1919" height="976" alt="Screenshot 2026-01-27 103906" src="https://github.com/user-attachments/assets/04e401e1-e003-444d-a1b1-d385c92f2815" />
-<img width="1919" height="971" alt="Screenshot 2026-01-27 104037" src="https://github.com/user-attachments/assets/259adb25-825b-4056-b2f1-daf5706b60d3" />
-<img width="1919" height="980" alt="Screenshot 2026-01-27 104023" src="https://github.com/user-attachments/assets/8abe119e-2dc7-4814-b8f6-c58b3fda416d" />
-<img width="1911" height="976" alt="Screenshot 2026-01-27 103959" src="https://github.com/user-attachments/assets/6989c59c-7c03-4157-a0af-53c22383d323" />
+<img width="1919" height="963" alt="Screenshot 2026-01-27 141953" src="https://github.com/user-attachments/assets/42c89454-27c6-42e7-9b2d-b0c15428f2cf" />
+<img width="1890" height="979" alt="Screenshot 2026-01-27 141938" src="https://github.com/user-attachments/assets/aa439307-9396-4184-8929-b77b165ef454" />
+<img width="1919" height="965" alt="Screenshot 2026-01-27 141902" src="https://github.com/user-attachments/assets/4adeda8f-c479-4727-bfe3-a0fea67ad417" />
+<img width="1907" height="902" alt="Screenshot 2026-01-27 141850" src="https://github.com/user-attachments/assets/400ab794-38d1-46a6-82bd-381fb4a66736" />
+<img width="1914" height="970" alt="Screenshot 2026-01-27 141820" src="https://github.com/user-attachments/assets/e10fc56c-d5aa-4095-8fc7-276f65d6674c" />
+<img width="1919" height="916" alt="Screenshot 2026-01-27 141803" src="https://github.com/user-attachments/assets/d6934ced-07c0-40c1-b86d-0712df03c255" />
+
 
 
 This system automates the entire research workflow from topic → sources → content → report.
