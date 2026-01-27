@@ -109,7 +109,7 @@ function HomePage() {
               onKeyPress={(e) => e.key === "Enter" && createProject()}
             />
             <button onClick={createProject} className="btn-create">
-              <span className="btn-icon">➕</span>
+              <span className="btn-icon">+ </span>
               Create Project
             </button>
           </div>
@@ -157,8 +157,8 @@ function HomePage() {
                     {deletingId === project.id ? (
                       <span className="spinner-small"></span>
                     ) : (
-                      "🗑️"
-                    )}
+                      "DELETE"
+                    )}  
                   </button>
                 </div>
                 

@@ -162,7 +162,7 @@ function ReportPage() {
         <div className="sidebar">
           {/* Sources */}
           <div className="sources-panel">
-            <h3>🔗 Sources ({sources.length})</h3>
+            <h3> Sources ({sources.length})</h3>
             <div className="sources-list">
               {sources.length === 0 ? (
                 <p className="empty-text">No sources yet...</p>
@@ -184,7 +184,7 @@ function ReportPage() {
 
           {/* Q&A Section */}
           <div className="qa-panel">
-            <h3>❓ Ask Questions</h3>
+            <h3> Ask Questions</h3>
             <input
               type="text"
               value={question}
@@ -198,7 +198,7 @@ function ReportPage() {
               disabled={asking || !question.trim()}
               className="btn-ask"
             >
-              {asking ? "🤔 Thinking..." : "Ask"}
+              {asking ? " Thinking..." : "Ask"}
             </button>
 
             {answer && (
