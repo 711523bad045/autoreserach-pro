@@ -11,3 +11,4 @@ faiss-cpu
 beautifulsoup4
 requests
 reportlab
+psycopg2-binary
