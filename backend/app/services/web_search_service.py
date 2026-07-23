@@ -14,40 +14,30 @@ class WebSearchService:
             "srsearch": query,
             "format": "json"
         }
-
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoResearchBot/1.0"
         }
-
         try:
             r = requests.get(search_url, params=params, headers=headers, timeout=20)
-
             print(" Wikipedia status code:", r.status_code)
-
             if r.status_code != 200:
                 print(" Wikipedia HTTP error")
                 print(r.text[:500])
                 return []
-
             # DEBUG: check what we actually got
             if not r.text.strip().startswith("{"):
                 print(" Wikipedia returned non-JSON content:")
                 print(r.text[:500])
                 return []
-
             data = r.json()
-
             if "query" not in data or "search" not in data["query"]:
                 print(" Wikipedia JSON has no search results")
                 print(data)
                 return []
-
             results = data["query"]["search"]
-
             if not results:
-                print(" No Wikipedia pages found")
+                print("No Wikipedia pages found")
                 return []
-
             urls = []
             for item in results[:max_results]:
                 title = item["title"]
@@ -85,9 +75,9 @@ class WebScraper:
             for s in soup(["script", "style", "noscript", "header", "footer", "nav", "form", "aside"]):
                 s.extract()
 
-            content = soup.find("div", {"id": "mw-content-text"})
+            content = soup.find("div", {"id":"mw-content-text"})
             if not content:
-                print(" No content div found")
+                print("No content div found")
                 return url, ""
 
             text = content.get_text(separator=" ")
@@ -95,9 +85,7 @@ class WebScraper:
 
             # Limit size
             text = text[:30000]
-
             title = soup.title.string if soup.title else url
-
             if len(text) < 1500:
                 print(" Too little content")
                 return title, ""

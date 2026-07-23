@@ -4,79 +4,200 @@ import { api } from "../api";
 import "../styles/IEEEPage.css";
 
 function IEEEPage() {
-  const { projectId } = useParams();
-  const navigate = useNavigate();
+    const { projectId } = useParams();
+    const navigate = useNavigate();
 
-  const [ieeeReport, setIeeeReport] = useState(null);
-  const [loading, setLoading] = useState(true);
+    const [report, setReport] = useState(null);
 
-  useEffect(() => {
-    loadIEEEReport();
-  }, [projectId]);
+    useEffect(() => {
+        loadIEEE();
+    }, []);
 
-  const loadIEEEReport = async () => {
-    try {
-      const res = await api.get(`/projects/${projectId}/ieee`);
-      setIeeeReport(res.data);
-    } catch (err) {
-      alert("No IEEE report found. Please generate it first.");
-      navigate(`/report/${projectId}`);
+    async function loadIEEE() {
+        try {
+            const res = await api.get(`/projects/${projectId}/ieee`);
+            setReport(res.data);
+        } catch (err) {
+            alert("Unable to load IEEE Report");
+            navigate(`/report/${projectId}`);
+        }
     }
-    setLoading(false);
-  };
 
-  if (loading) {
+    if (!report) {
+        return <div className="loading">Generating IEEE preview…</div>;
+    }
+
     return (
-      <div className="ieee-container">
-        <div className="loading-screen">
-          <div className="spinner"></div>
-          <h2>Loading IEEE Report...</h2>
+        <div className="paper-background">
+
+            <div className="toolbar">
+                <div className="toolbar-brand">
+                    <span className="dot" />
+                    Research Agent · IEEE Preview
+                </div>
+
+                <div className="toolbar-actions">
+                    <button onClick={() => navigate(`/report/${projectId}`)}>
+                        ← Back
+                    </button>
+
+                    <button className="primary" onClick={() => window.print()}>
+                        Print / Export
+                    </button>
+                </div>
+            </div>
+
+            <div className="paper-frame">
+                <div className="paper">
+
+                    <h1 className="paper-title">
+                        {report.title}
+                    </h1>
+
+                    <div className="authors">
+                        Rajesh N | AI Research Assistant
+                    </div>
+
+                    <div className="abstract">
+                        {report.abstract}
+                    </div>
+
+                    <div className="keywords">
+                        Blockchain, Artificial Intelligence,
+                        Deep Learning, Federated Learning, Research
+                    </div>
+
+                    <div className="columns">
+
+                        <div className="column">
+
+                            {report.full_content.split("\n").map((line, index) => {
+
+                                if (!line.trim()) {
+                                    return <br key={index} />;
+                                }
+
+                                // ---------------- Architecture ----------------
+
+                                if (line.includes("[[IMAGE:architecture]]")) {
+                                    return (
+                                        <div className="figure" key={index}>
+                                            <img
+                                                src={`http://127.0.0.1:8000/generated_diagrams/${projectId}_architecture.png`}
+                                                className="report-image"
+                                                alt="Architecture"
+                                            />
+                                            <div className="figure-caption">
+                                                Figure 1. Overall System Architecture
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                // ---------------- Workflow ----------------
+
+                                if (line.includes("[[IMAGE:workflow]]")) {
+                                    return (
+                                        <div className="figure" key={index}>
+                                            <img
+                                                src={`http://127.0.0.1:8000/generated_diagrams/${projectId}_workflow.png`}
+                                                className="report-image"
+                                                alt="Workflow"
+                                            />
+                                            <div className="figure-caption">
+                                                Figure 2. Proposed Workflow
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                // ---------------- Accuracy ----------------
+
+                                if (line.includes("[[IMAGE:accuracy]]")) {
+                                    return (
+                                        <div className="figure" key={index}>
+                                            <img
+                                                src={`http://127.0.0.1:8000/generated_diagrams/${projectId}_accuracy.png`}
+                                                className="report-image"
+                                                alt="Accuracy"
+                                            />
+                                            <div className="figure-caption">
+                                                Figure 3. Accuracy Comparison
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                // ---------------- Comparison ----------------
+
+                                if (line.includes("[[IMAGE:comparison]]")) {
+                                    return (
+                                        <div className="figure" key={index}>
+                                            <img
+                                                src={`http://127.0.0.1:8000/generated_diagrams/${projectId}_comparison.png`}
+                                                className="report-image"
+                                                alt="Comparison"
+                                            />
+                                            <div className="figure-caption">
+                                                Figure 4. Performance Comparison
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                // ---------------- H1 ----------------
+
+                                if (line.startsWith("# ")) {
+                                    return (
+                                        <h1 key={index}>
+                                            {line.replace("# ", "")}
+                                        </h1>
+                                    );
+                                }
+
+                                // ---------------- H2 ----------------
+
+                                if (line.startsWith("## ")) {
+                                    return (
+                                        <h2 key={index}>
+                                            {line.replace("## ", "")}
+                                        </h2>
+                                    );
+                                }
+
+                                // ---------------- H3 ----------------
+
+                                if (line.startsWith("### ")) {
+                                    return (
+                                        <h3 key={index}>
+                                            {line.replace("### ", "")}
+                                        </h3>
+                                    );
+                                }
+
+                                // ---------------- Paragraph ----------------
+
+                                return (
+                                    <p key={index}>
+                                        {line}
+                                    </p>
+                                );
+
+                            })}
+
+                        </div>
+
+                    </div>
+
+                    <div className="page-number">
+                        Page 1
+                    </div>
+
+                </div>
+            </div>
+
         </div>
-      </div>
     );
-  }
-
-  if (!ieeeReport) {
-    return null;
-  }
-
-  return (
-    <div className="ieee-container">
-      {/* Top Navigation */}
-      <nav className="top-nav">
-        <button onClick={() => navigate(`/report/${projectId}`)} className="btn-back">
-          ← Back to Report
-        </button>
-        <h1>IEEE Format - {ieeeReport.title}</h1>
-      </nav>
-
-      {/* IEEE Content */}
-      <div className="ieee-content">
-        <div className="ieee-paper">
-          <pre>{ieeeReport.full_content}</pre>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="action-footer">
-        <button
-          onClick={() => window.print()}
-          className="btn-action"
-        >
-           Print
-        </button>
-        <button
-          onClick={() => {
-            const url = `${api.defaults.baseURL}/projects/${projectId}/download/pdf`;
-            window.open(url, "_blank");
-          }}
-          className="btn-action"
-        >
-          ⬇ Download PDF
-        </button>
-      </div>
-    </div>
-  );
 }
 
 export default IEEEPage;

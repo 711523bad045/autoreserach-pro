@@ -1,11 +1,11 @@
-from urllib.parse import quote_plus
+import os
+from dotenv import load_dotenv
 
-DB_NAME = "autoresearch_pro"
-DB_USER = "RAJESH"
-DB_PASSWORD = "Rrajesh2004@"
-DB_HOST = "localhost"
-DB_PORT = "3306"
+load_dotenv()
 
-ENCODED_PASSWORD = quote_plus(DB_PASSWORD)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-DATABASE_URL = f"mysql+pymysql://{DB_USER}:{ENCODED_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL not found in .env")
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")

@@ -1,12 +1,22 @@
 from sqlalchemy.orm import Session
+
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.source_repository import SourceRepository
+
 
 class ProjectService:
 
     @staticmethod
-    def create_project(db: Session, title: str, description: str):
-        return ProjectRepository.create(db, title, description)
+    def create_project(
+        db: Session,
+        title: str,
+        description: str = None,
+    ):
+        return ProjectRepository.create(
+            db=db,
+            title=title,
+            description=description,
+        )
 
     @staticmethod
     def list_projects(db: Session):

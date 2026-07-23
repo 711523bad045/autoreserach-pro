@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import "../styles/HomePage.css";
+import ProjectForm from "../components/ProjectForm";
 
 function HomePage() {
   const [projects, setProjects] = useState([]);
-  const [newTitle, setNewTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -21,17 +21,14 @@ function HomePage() {
     loadProjects();
   }, []);
 
-  const createProject = async () => {
-    if (!newTitle.trim()) return;
-
-    await api.post("/projects/", {
-      title: newTitle,
-      description: "",
-    });
-
-    setNewTitle("");
+  const createProject = async (projectData) => {
+  try {
+    await api.post("/projects/", projectData);
     loadProjects();
-  };
+  } catch (err) {
+    alert("Failed to create project");
+  }
+};
 
   const generateReport = async (project) => {
     if (loading) return;
@@ -41,7 +38,7 @@ function HomePage() {
 
     try {
       await api.post(`/projects/${project.id}/generate_simple_report`);
-      navigate(`/report/${project.id}`);
+      navigate(`/workspace/${project.id}`);
     } catch (err) {
       alert("Failed to generate report");
     }
@@ -97,23 +94,7 @@ function HomePage() {
 
       {/* Create New Project */}
       <section className="create-section">
-        <div className="section-card">
-          <h2> Create New Research Topic</h2>
-          <div className="input-group">
-            <input
-              type="text"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="Enter your research topic (e.g., Artificial Intelligence, Quantum Computing...)"
-              className="topic-input"
-              onKeyPress={(e) => e.key === "Enter" && createProject()}
-            />
-            <button onClick={createProject} className="btn-create">
-              <span className="btn-icon">+ </span>
-              Create Project
-            </button>
-          </div>
-        </div>
+      <ProjectForm onCreate={createProject} />
       </section>
 
       {/* Projects Grid */}

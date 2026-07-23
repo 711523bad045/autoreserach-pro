@@ -205,3 +205,25 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# ===== ResearchPilot AI =====
+
+# Node
+backend/node_modules/
+frontend/node_modules/
+
+# Generated reports
+backend/tmp/
+
+# Generated diagrams
+backend/generated_diagrams/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

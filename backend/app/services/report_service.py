@@ -5,22 +5,27 @@ import time
 
 from app.database.models import Report, Source, Chunk, ResearchProject, ReportSection
 from app.database.models import IEEEReport
-from app.llm.ollama_client import OllamaClient
-from app.services.web_search_service import WebSearchService, WebScraper
 
+from app.llm.groq_client import GroqClient
+
+from app.services.research_provider import ResearchProvider
+from app.services.paper_ranking_service import PaperRankingService
+from app.services.embedding_service import EmbeddingService
+from app.services.evidence_service import EvidenceService
+from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.report_agent import ReportAgent
+from app.services.figure_service import FigureService
+from app.services.report_builder import ReportBuilder
 
 class ReportService:
     def __init__(self, db: Session):
         self.db = db
 
-        # FAST model for everything
-        self.llm = OllamaClient(model="qwen2.5:0.5b")
+        self.llm =GroqClient()
 
-        # FAST model for IEEE (changed from 1.5b to 0.5b for speed)
-        self.ieee_llm = OllamaClient(model="qwen2.5:0.5b")
+        self.ieee_llm =GroqClient()
 
-        # FAST model for Q&A
-        self.qa_llm = OllamaClient(model="qwen2.5:0.5b")
+        self.qa_llm = GroqClient()
 
     def generate_simple_report(self, project_id: int):
         project = self.db.query(ResearchProject).filter(
@@ -31,6 +36,8 @@ class ReportService:
             raise Exception("Project not found")
 
         topic = project.title
+        builder = ReportBuilder()
+        builder.set_title(topic)
 
         # Check for existing report
         existing = (
@@ -60,69 +67,151 @@ class ReportService:
             self.db.commit()
             self.db.refresh(report)
 
-        # Web search
+       # Semantic Scholar Search
         try:
-            urls = WebSearchService.search(topic, max_results=5)
+            papers = ResearchProvider.search(topic)
+
+            papers = PaperRankingService.rank(
+                papers,
+                topic=topic
+            )
+
+            print("Extracting evidence...")
+
+            evidence = EvidenceService.extract_many(papers)
+            knowledge = KnowledgeBaseService.build(
+                evidence
+            )
+
+            print()
+
+            print("Knowledge Base")
+
+            print("----------------")
+
+            print("Problems:", len(knowledge["problems"]))
+
+            print("Methods:", len(knowledge["methods"]))
+
+            print("Datasets:", len(knowledge["datasets"]))
+
+            print("Results:", len(knowledge["results"]))
+
+            print("Limitations:", len(knowledge["limitations"]))
+
+            from app.services.research_gap_service import ResearchGapService
+
+            gap_service = ResearchGapService()
+
+            gap_analysis = gap_service.detect(
+                topic,
+                evidence
+            )
+            print()
+            print("Generating Figures...")
+
+            figures = FigureService.generate_all(
+                project_id=project_id,
+                topic=topic,
+                knowledge=knowledge,
+            )
+            builder.add_figure(
+                "System Architecture",
+                figures["architecture"]
+            )
+
+            builder.add_figure(
+                "Workflow Diagram",
+                figures["workflow"]
+            )
+
+            builder.add_figure(
+                "Accuracy Comparison",
+                figures["accuracy"]
+            )
+
+            builder.add_figure(
+                "Performance Comparison",
+                figures["comparison"]
+            )
+
+            print("All figures generated.")
+                                
+
+            print(f"Using {len(papers)} top ranked papers.")
         except Exception as e:
-            print(f" Web search error: {e}")
-            urls = []
-            
-        if not urls:
-            report.full_content = " No sources found"
+            print(f"Semantic Scholar Error: {e}")
+
+            raise Exception(
+                "Groq API quota exceeded. Wait for the quota to reset or use another API key."
+            )
+
+        if not papers:
+            report.full_content = "No research papers found."
             self.db.commit()
-            raise Exception("No sources found")
+            raise Exception("No research papers found.")
 
         all_chunks = []
         source_urls = []
 
         # Scrape sources
-        for url in urls:
+        all_chunks = []
+        source_urls = []
+
+        for paper in papers:
+
             try:
-                title, content = WebScraper.scrape(url)
-                if not content or len(content) < 1000:
+                title = paper.get("title", "Unknown")
+
+                abstract = paper.get("abstract", "")
+
+                year = paper.get("year", "")
+
+                citations = paper.get("citationCount", 0)
+
+                url = paper.get("url", "")
+
+                if not abstract:
                     continue
 
                 src = Source(
                     project_id=project_id,
-                    url=url,
                     title=title,
-                    content=content
+                    url=url,
+                    content=abstract
                 )
+
                 self.db.add(src)
                 self.db.commit()
                 self.db.refresh(src)
 
                 source_urls.append(url)
 
-                words = content.split()
-                chunk_size = 350
-                chunk_index = 0
+                all_chunks.append(
+                    f"""
+        Title: {title}
 
-                for i in range(0, len(words), chunk_size):
-                    chunk_text = " ".join(words[i:i + chunk_size])
-                    if len(chunk_text) < 300:
-                        continue
+        Year: {year}
 
-                    chunk = Chunk(
-                        source_id=src.id,
-                        page_url=url,
-                        content=chunk_text,
-                        chunk_index=chunk_index
-                    )
-                    self.db.add(chunk)
-                    all_chunks.append(chunk_text)
-                    chunk_index += 1
+        Citation Count: {citations}
 
-                self.db.commit()
-                
+        Abstract:
+        {abstract}
+        """
+                )
+
             except Exception as e:
-                print(f"⚠️ Error scraping {url}: {e}")
+                print(f"Paper Error: {e}")
                 continue
+                
 
         if len(all_chunks) < 3:
             raise Exception(" Too little content")
 
         print(f" Collected {len(all_chunks)} chunks")
+        embedding_service = EmbeddingService()
+
+        index, embeddings = embedding_service.build_index(all_chunks)
 
         #  REDUCED SECTION SIZES FOR SPEED
         sections_plan = [
@@ -135,8 +224,12 @@ class ReportService:
             ("Conclusion", 300),
         ]
 
+        
+
         full_text = f"# {topic}\n\n"
         report.full_content = full_text
+        
+
         self.db.commit()
 
         # Generate sections
@@ -146,23 +239,57 @@ class ReportService:
             # Show progress
             full_text += f"\n## {section_title}\n\n Generating...\n"
             report.full_content = full_text
+           
             self.db.commit()
 
             # Varied context
-            chunk_start = (idx * 3) % len(all_chunks)
-            chunk_end = min(chunk_start + 4, len(all_chunks))
-            context = "\n\n".join(all_chunks[chunk_start:chunk_end])
+            retrieved_chunks = embedding_service.search(
+                section_title,
+                all_chunks,
+                index,
+                k=5
+            )
 
-            prompt = f"""Write a {target_words}-word section about {section_title} for a research paper on {topic}.
+            context = "\n\n".join(retrieved_chunks)
 
-Be concise and clear. Use this reference:
-{context[:1500]}
+            prompt = f"""
+You are an IEEE research writer.
 
-Write {section_title}:"""
+Topic:
+{topic}
+
+Section:
+{section_title}
+
+Reference Material:
+{context[:2500]}
+
+Instructions:
+
+- Use ONLY the supplied reference material.
+- Never invent facts.
+- Write in formal academic English.
+- Avoid plagiarism.
+- Produce original wording.
+- Explain concepts clearly.
+- Do not use bullet points unless necessary.
+- Target approximately {target_words} words.
+
+Write only the {section_title} section.
+"""
 
             try:
                 start = time.time()
-                section_text = self.llm.generate(prompt)
+                section_text = ReportAgent.write_section(
+                    topic=topic,
+                    section=section_title,
+                    knowledge=knowledge,
+                    words=target_words
+                )
+                builder.add_section(
+                    section_title,
+                    section_text
+                )
                 elapsed = time.time() - start
                 
                 print(f"   ✓ Done in {elapsed:.1f}s")
@@ -181,19 +308,65 @@ Write {section_title}:"""
             )
 
             report.full_content = full_text
+            
+            
             self.db.commit()
 
         # Add references
         if source_urls:
             full_text += "\n\n---\n\n## References\n\n"
             for idx, u in enumerate(source_urls, 1):
+                builder.add_reference(u)
                 full_text += f"{idx}. {u}\n"
+        full_text += "\n\n---\n"
+        full_text += """
+
+        # System Architecture
+
+        [[IMAGE:architecture]]
+
+        Figure 1. Overall System Architecture
+
+
+        # Workflow Diagram
+
+        [[IMAGE:workflow]]
+
+        Figure 2. Proposed Workflow
+
+
+        # Performance Evaluation
+
+        [[IMAGE:accuracy]]
+
+        Figure 3. Accuracy Comparison
+
+
+        [[IMAGE:comparison]]
+
+        Figure 4. Performance Comparison
+
+        """
+
+        full_text += "\n# Research Gap Analysis\n\n"
+
+        full_text += str(gap_analysis)
 
         report.full_content = full_text
+        
         self.db.commit()
         self.db.refresh(report)
+        structured_report = builder.build()
 
-        print(f"\n Complete: {len(full_text)} chars")
+        report.structured_content = structured_report
+
+        self.db.commit()
+
+        print("\n===== Structured Report =====")
+
+        print(structured_report)
+
+        print(f"\nComplete: {len(full_text)} chars")
 
         return report
 
@@ -248,49 +421,73 @@ Answer:"""
             raise Exception("No base report found")
 
         print(" Converting to IEEE format...")
+        from app.services.ieee_formatter import IEEEFormatter
 
         #  REDUCED INPUT SIZE - only use first 6000 chars instead of 10000
-        prompt = f"""Convert this to IEEE paper format with these sections: Title, Abstract, Keywords, Introduction, Background, Core Concepts, Architecture, Applications, Advantages/Limitations, Conclusion, References.
 
-Use formal academic tone. Keep it concise.
 
-Base report:
-{report.full_content[:6000]}
+        builder = ReportBuilder()
 
-Write IEEE paper:"""
+        builder.set_title(report.title.replace("Research:", "").strip())
 
-        try:
-            start_time = time.time()
-            ieee_text = self.ieee_llm.generate(prompt)
-            elapsed = time.time() - start_time
-            print(f" IEEE generated in {elapsed:.1f}s")
-            
-        except Exception as e:
-            print(f" IEEE generation error: {str(e)}")
-            # Fallback: use original report with IEEE header
-            ieee_text = f"""### Title: {report.title.replace('Research:', '').strip()}
+        builder.abstract = report.full_content[:1000]
 
-### Abstract:
-{report.full_content[:1000]}
+        builder.keywords = [
+            "Artificial Intelligence",
+            "Research",
+            "Machine Learning"
+        ]
 
-### Keywords:
-Research, Analysis, Technology
+        sections = report.full_content.split("##")
 
-{report.full_content}
-"""
-            print(" Using fallback IEEE format")
+        for sec in sections:
+
+            sec = sec.strip()
+
+            if not sec:
+                continue
+
+            lines = sec.split("\n", 1)
+
+            title = lines[0].strip()
+
+            body = lines[1].strip() if len(lines) > 1 else ""
+
+            builder.add_section(title, body)
+        builder.add_figure(
+            "System Architecture",
+            "architecture"
+        )
+
+        builder.add_figure(
+            "Workflow Diagram",
+            "workflow"
+        )
+
+        builder.add_figure(
+            "Accuracy Comparison",
+            "accuracy"
+        )
+
+        builder.add_figure(
+            "Performance Comparison",
+            "comparison"
+        )
+        ieee_text = IEEEFormatter.format(builder)
+
+        print("IEEE report created using ReportBuilder.")
 
         if not ieee_text or len(ieee_text.strip()) < 500:
-            print(" IEEE output too short, using fallback")
-            ieee_text = f"""### Title: {report.title.replace('Research:', '').strip()}
+                    print(" IEEE output too short, using fallback")
+                    ieee_text = f"""### Title: {report.title.replace('Research:', '').strip()}
 
-### Abstract:
-{report.full_content[:1000]}
+        ### Abstract:
+        {report.full_content[:1000]}
 
-### Keywords:
-Research, Analysis, Technology
+        ### Keywords:
+        Research, Analysis, Technology
 
-{report.full_content}
+        {report.full_content}
 """
 
         ieee = IEEEReport(

@@ -1,7 +1,8 @@
 fastapi
 uvicorn
 sqlalchemy
-pymysql
+psycopg[binary]
+groq
 alembic
 pydantic
 python-dotenv

@@ -6,11 +6,22 @@ from app.database.base import Base
 
 #  IMPORT YOUR ROUTER
 from app.api.project_routes import router as project_router
+from fastapi.staticfiles import StaticFiles
 
 # Create tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AutoResearch Pro")
+
+import os
+
+os.makedirs("generated_diagrams", exist_ok=True)
+
+app.mount(
+    "/generated_diagrams",
+    StaticFiles(directory="generated_diagrams"),
+    name="generated_diagrams",
+)
 
 # CORS
 app.add_middleware(
@@ -21,7 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ REGISTER ROUTER
+#  REGISTER ROUTER
 app.include_router(project_router)
 
 @app.get("/")

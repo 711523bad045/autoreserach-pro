@@ -21,8 +21,7 @@ from app.database.models import IEEEReport
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
-# PROJECTS
-
+# PROJECTS 
 @router.post("/")
 def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     return ProjectService.create_project(db, payload.title, payload.description)

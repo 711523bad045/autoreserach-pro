@@ -22,10 +22,16 @@ a:hover {
   color: #535bf2;
 }
 
+/*
+  NOTE: the original Vite starter template had
+    display: flex; place-items: center;
+  here to center a single logo on the demo page. With a real
+  multi-route app, that shrink-wraps #root to its content width
+  and pins it to the left of the viewport instead of letting it
+  fill the page — that's what was causing the right-side gap.
+*/
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
 }
