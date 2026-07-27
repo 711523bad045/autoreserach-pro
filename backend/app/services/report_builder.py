@@ -20,6 +20,15 @@ class ReportBuilder:
 
         self.report["abstract"] = text
 
+    def set_keywords(self, keywords):
+        """
+        Bulk-assign keywords. Use this instead of setting `builder.keywords`
+        directly — that would create a stray attribute on the builder
+        object itself rather than updating self.report["keywords"], which
+        is what build() actually returns.
+        """
+        self.report["keywords"] = list(keywords or [])
+
     def add_keyword(self, keyword):
 
         self.report["keywords"].append(keyword)

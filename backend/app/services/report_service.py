@@ -1,3 +1,4 @@
+import re
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 import traceback
@@ -16,6 +17,81 @@ from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services.report_agent import ReportAgent
 from app.services.figure_service import FigureService
 from app.services.report_builder import ReportBuilder
+
+
+def _clean_text(text: str) -> str:
+    """Strip stray markdown symbols and collapse whitespace."""
+    if not text:
+        return ""
+    cleaned = re.sub(r"[#*_`]", "", text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _build_abstract(source_text: str, max_words: int = 150) -> str:
+    """
+    Build a real abstract paragraph from a section's text (normally the
+    Introduction), instead of blindly slicing the first N raw characters
+    of the whole markdown report (which used to include literal '#'
+    headings and produce garbage output).
+    """
+    cleaned = _clean_text(source_text)
+    if not cleaned:
+        return ""
+
+    words = cleaned.split(" ")
+    if len(words) > max_words:
+        cleaned = " ".join(words[:max_words]).rstrip(".,;: ") + "..."
+    return cleaned
+
+
+def _derive_keywords(topic: str, max_keywords: int = 6):
+    """
+    Derive keywords from the project topic instead of using a hardcoded,
+    unrelated placeholder list. Heuristic: split the topic on common
+    connector words/punctuation into meaningful phrases, pull out any
+    parenthetical acronyms (e.g. "(IoT)") as extra keywords, and dedupe.
+    """
+    if not topic:
+        return []
+
+    parenthetical = re.findall(r"\(([^)]+)\)", topic)
+    base = re.sub(r"\([^)]*\)", "", topic)
+
+    parts = re.split(
+        r"\s*[:,]\s*|\s+for\s+|\s+using\s+|\s+with\s+|\s+via\s+|-[Bb]ased\s+",
+        base,
+    )
+
+    stopwords = {
+        "a", "an", "the", "of", "and", "or", "to", "in", "on",
+        "system", "systems"
+    }
+
+    keywords = []
+    for part in parts:
+        part = part.strip(" -")
+        if not part:
+            continue
+        words = [w for w in part.split() if w.lower() not in stopwords]
+        phrase = " ".join(words).strip()
+        if phrase and len(phrase) > 2:
+            keywords.append(phrase)
+
+    for p in parenthetical:
+        if p not in keywords:
+            keywords.append(p)
+
+    seen = set()
+    unique = []
+    for k in keywords:
+        key = k.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(k)
+
+    return unique[:max_keywords]
+
 
 class ReportService:
     def __init__(self, db: Session):
@@ -38,6 +114,7 @@ class ReportService:
         topic = project.title
         builder = ReportBuilder()
         builder.set_title(topic)
+        builder.set_keywords(_derive_keywords(topic))
 
         # Check for existing report
         existing = (
@@ -67,7 +144,8 @@ class ReportService:
             self.db.commit()
             self.db.refresh(report)
 
-       # Semantic Scholar Search
+       # Semantic Scholar Search (falls back to / merges with OpenAlex
+       # inside ResearchProvider)
         try:
             papers = ResearchProvider.search(topic)
 
@@ -89,15 +167,15 @@ class ReportService:
 
             print("----------------")
 
-            print("Problems:", len(knowledge["problems"]))
+            print("Problems:", len(knowledge.get("problems", [])))
 
-            print("Methods:", len(knowledge["methods"]))
+            print("Methods:", len(knowledge.get("methods", [])))
 
-            print("Datasets:", len(knowledge["datasets"]))
+            print("Datasets:", len(knowledge.get("datasets", [])))
 
-            print("Results:", len(knowledge["results"]))
+            print("Results:", len(knowledge.get("results", [])))
 
-            print("Limitations:", len(knowledge["limitations"]))
+            print("Limitations:", len(knowledge.get("limitations", [])))
 
             from app.services.research_gap_service import ResearchGapService
 
@@ -136,28 +214,28 @@ class ReportService:
             )
 
             print("All figures generated.")
-                                
 
             print(f"Using {len(papers)} top ranked papers.")
-        except Exception as e:
-            print(f"Semantic Scholar Error: {e}")
 
-            raise Exception(
-                "Groq API quota exceeded. Wait for the quota to reset or use another API key."
-            )
+        except Exception as e:
+            # Don't mask the real error behind a generic "Groq quota" message.
+            # Log the full traceback and surface the actual exception to the caller.
+            print(f"Report generation pipeline error: {e}")
+            traceback.print_exc()
+            raise Exception(f"Report generation failed while gathering research: {e}")
 
         if not papers:
             report.full_content = "No research papers found."
             self.db.commit()
-            raise Exception("No research papers found.")
+            raise Exception(
+                "No research papers found for this topic. Try a broader or "
+                "differently phrased project title."
+            )
 
         all_chunks = []
         source_urls = []
 
         # Scrape sources
-        all_chunks = []
-        source_urls = []
-
         for paper in papers:
 
             try:
@@ -203,10 +281,21 @@ class ReportService:
             except Exception as e:
                 print(f"Paper Error: {e}")
                 continue
-                
 
         if len(all_chunks) < 3:
-            raise Exception(" Too little content")
+            report.full_content = (
+                f" Only {len(all_chunks)} usable source(s) with abstracts were found "
+                "(need at least 3). This usually happens when the search API is "
+                "rate-limited and falls back to a provider with fewer results. "
+                "Try again shortly, or use a broader project title.\n"
+            )
+            self.db.commit()
+            raise Exception(
+                f"Too little content: only {len(all_chunks)} paper(s) with abstracts "
+                "were found (minimum 3 required). This is usually caused by a "
+                "Semantic Scholar rate limit forcing a fallback to a provider that "
+                "returned few results — try again in a bit or broaden the topic."
+            )
 
         print(f" Collected {len(all_chunks)} chunks")
         embedding_service = EmbeddingService()
@@ -232,6 +321,8 @@ class ReportService:
 
         self.db.commit()
 
+        intro_text = ""
+
         # Generate sections
         for idx, (section_title, target_words) in enumerate(sections_plan):
             print(f"\n [{idx+1}/{len(sections_plan)}] {section_title}")
@@ -252,32 +343,6 @@ class ReportService:
 
             context = "\n\n".join(retrieved_chunks)
 
-            prompt = f"""
-You are an IEEE research writer.
-
-Topic:
-{topic}
-
-Section:
-{section_title}
-
-Reference Material:
-{context[:2500]}
-
-Instructions:
-
-- Use ONLY the supplied reference material.
-- Never invent facts.
-- Write in formal academic English.
-- Avoid plagiarism.
-- Produce original wording.
-- Explain concepts clearly.
-- Do not use bullet points unless necessary.
-- Target approximately {target_words} words.
-
-Write only the {section_title} section.
-"""
-
             try:
                 start = time.time()
                 section_text = ReportAgent.write_section(
@@ -286,20 +351,29 @@ Write only the {section_title} section.
                     knowledge=knowledge,
                     words=target_words
                 )
-                builder.add_section(
-                    section_title,
-                    section_text
-                )
                 elapsed = time.time() - start
                 
                 print(f"   ✓ Done in {elapsed:.1f}s")
                 
             except Exception as e:
                 print(f"   ✗ Error: {e}")
+                traceback.print_exc()
                 section_text = f"{context[:1000]}"
 
             if not section_text or len(section_text.strip()) < 200:
+                print(f"   ⚠ '{section_title}' output too short/empty, using raw context fallback")
                 section_text = f"{context[:1000]}"
+
+            # Add to the structured builder AFTER the fallback is resolved,
+            # so builder.report["sections"] always matches what actually
+            # ends up in full_text — previously this was added before the
+            # fallback logic ran, so a short/failed section could leave the
+            # structured report with different (or missing) content than
+            # the markdown version.
+            builder.add_section(section_title, section_text)
+
+            if section_title == "Introduction":
+                intro_text = section_text
 
             # Replace progress indicator with content
             full_text = full_text.replace(
@@ -311,6 +385,10 @@ Write only the {section_title} section.
             
             
             self.db.commit()
+
+        # Build a real abstract from the Introduction section instead of
+        # leaving it blank / slicing raw markdown.
+        builder.set_abstract(_build_abstract(intro_text))
 
         # Add references
         if source_urls:
@@ -358,7 +436,23 @@ Write only the {section_title} section.
         self.db.refresh(report)
         structured_report = builder.build()
 
-        report.structured_content = structured_report
+        # NOTE: this requires a `structured_content` JSON column on the
+        # Report model to actually persist. If that column doesn't exist,
+        # setting the attribute directly would just create a throwaway
+        # Python attribute that vanishes on the next DB fetch — check via
+        # the mapped table's columns instead of hasattr (which would be
+        # true either way once we set it below).
+        has_column = "structured_content" in report.__table__.columns
+
+        if has_column:
+            report.structured_content = structured_report
+        else:
+            print(
+                "WARNING: Report model has no 'structured_content' column — "
+                "skipping persistence. Add this column to app/database/models.py "
+                "so expand_to_ieee can use the clean structured data instead of "
+                "falling back to markdown re-parsing."
+            )
 
         self.db.commit()
 
@@ -423,37 +517,78 @@ Answer:"""
         print(" Converting to IEEE format...")
         from app.services.ieee_formatter import IEEEFormatter
 
-        #  REDUCED INPUT SIZE - only use first 6000 chars instead of 10000
-
-
         builder = ReportBuilder()
 
-        builder.set_title(report.title.replace("Research:", "").strip())
+        clean_title = report.title.replace("Research:", "").strip()
+        builder.set_title(clean_title)
 
-        builder.abstract = report.full_content[:1000]
+        structured = getattr(report, "structured_content", None)
 
-        builder.keywords = [
-            "Artificial Intelligence",
-            "Research",
-            "Machine Learning"
-        ]
+        if structured and structured.get("sections"):
+            # Preferred path: reuse the already-clean structured data built
+            # during generate_simple_report, instead of re-parsing the
+            # markdown text (which was the source of the duplicated/blank
+            # Abstract & Keywords and the stray "# Title" pseudo-section).
+            print(" Using structured_content (preferred, clean path)")
 
-        sections = report.full_content.split("##")
+            builder.set_abstract(
+                structured.get("abstract")
+                or _build_abstract(report.full_content[:1500])
+            )
+            builder.set_keywords(
+                structured.get("keywords") or _derive_keywords(clean_title)
+            )
 
-        for sec in sections:
+            for sec in structured["sections"]:
+                title = (sec.get("title") or "").lstrip("#").strip()
+                content = (sec.get("content") or "").strip()
+                if title:
+                    builder.add_section(title, content)
 
-            sec = sec.strip()
+            for ref in structured.get("references", []):
+                builder.add_reference(ref)
 
-            if not sec:
-                continue
+        else:
+            # Legacy fallback for older reports that don't have
+            # structured_content saved. Parses the markdown text directly,
+            # fixed to skip the bogus title-only preamble chunk and to pull
+            # references out as real reference entries instead of dumping
+            # them (and any trailing figure/gap-analysis text) into a
+            # generic "References" section.
+            print(" No structured_content found — using legacy text parser")
 
-            lines = sec.split("\n", 1)
+            raw_sections = report.full_content.split("##")[1:]
+            intro_text = ""
 
-            title = lines[0].strip()
+            for sec in raw_sections:
+                sec = sec.strip()
+                if not sec:
+                    continue
 
-            body = lines[1].strip() if len(lines) > 1 else ""
+                lines = sec.split("\n", 1)
+                title = lines[0].strip().lstrip("#").strip()
+                body = lines[1].strip() if len(lines) > 1 else ""
 
-            builder.add_section(title, body)
+                if not title:
+                    continue
+
+                if title.lower() == "references":
+                    for line in body.splitlines():
+                        line = line.strip()
+                        if line.lower().startswith("http"):
+                            builder.add_reference(line)
+                    continue
+
+                builder.add_section(title, body)
+
+                if title.lower() == "introduction":
+                    intro_text = body
+
+            builder.set_abstract(
+                _build_abstract(intro_text) or _build_abstract(report.full_content[:1500])
+            )
+            builder.set_keywords(_derive_keywords(clean_title))
+
         builder.add_figure(
             "System Architecture",
             "architecture"
@@ -479,7 +614,7 @@ Answer:"""
 
         if not ieee_text or len(ieee_text.strip()) < 500:
                     print(" IEEE output too short, using fallback")
-                    ieee_text = f"""### Title: {report.title.replace('Research:', '').strip()}
+                    ieee_text = f"""### Title: {clean_title}
 
         ### Abstract:
         {report.full_content[:1000]}
@@ -492,7 +627,7 @@ Answer:"""
 
         ieee = IEEEReport(
             project_id=project_id,
-            title=f"IEEE: {report.title.replace('Research:', '').strip()}",
+            title=f"IEEE: {clean_title}",
             full_content=ieee_text
         )
 

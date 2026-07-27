@@ -1,4 +1,4 @@
-from groq import Groq
+from groq import Groq, RateLimitError
 from dotenv import load_dotenv
 import os
 
@@ -9,7 +9,24 @@ client = Groq(
 )
 
 
+class GroqQuotaExceededError(Exception):
+    """
+    Raised when the Groq API reports a rate limit / quota error (HTTP 429).
+    This is distinct from a generic failure: once this happens, further
+    calls in the same run are almost certainly going to fail too (daily
+    token quotas don't reset for minutes/hours), so callers should stop
+    retrying and degrade gracefully instead of hammering the API.
+    """
+    pass
+
+
 class GroqClient:
+
+    # Class-level flag: once we see a 429, avoid even attempting further
+    # network calls for the rest of this process run. Saves time and log
+    # spam once the daily quota is known to be exhausted.
+    _quota_exhausted = False
+    _quota_message = ""
 
     def __init__(
         self,
@@ -19,14 +36,20 @@ class GroqClient:
 
     def generate(self, prompt):
 
-        response = client.chat.completions.create(
+        if GroqClient._quota_exhausted:
+            raise GroqQuotaExceededError(
+                GroqClient._quota_message or "Groq API quota exhausted."
+            )
 
-            model=self.model,
+        try:
+            response = client.chat.completions.create(
 
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are an IEEE research writer.
+                model=self.model,
+
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an IEEE research writer.
 
 Never invent facts.
 
@@ -37,19 +60,24 @@ Avoid plagiarism.
 Write original content.
 
 Use clear paragraphs."""
-                },
+                    },
 
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
 
-            ],
+                ],
 
-            temperature=0.3,
+                temperature=0.3,
 
-            max_completion_tokens=4096
+                max_completion_tokens=4096
 
-        )
+            )
 
-        return response.choices[0].message.content
+            return response.choices[0].message.content
+
+        except RateLimitError as e:
+            GroqClient._quota_exhausted = True
+            GroqClient._quota_message = str(e)
+            raise GroqQuotaExceededError(str(e)) from e

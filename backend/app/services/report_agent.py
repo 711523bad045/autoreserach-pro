@@ -1,4 +1,4 @@
-from app.llm.groq_client import GroqClient
+from app.llm.groq_client import GroqClient, GroqQuotaExceededError
 
 llm = GroqClient()
 
@@ -12,6 +12,16 @@ class ReportAgent:
         knowledge,
         words=500
     ):
+
+        # Safe access — never KeyError even if KnowledgeBaseService.build()
+        # doesn't populate every field.
+        problems = knowledge.get("problems", [])
+        methods = knowledge.get("methods", [])
+        datasets = knowledge.get("datasets", [])
+        results = knowledge.get("results", [])
+        limitations = knowledge.get("limitations", [])
+        future_work = knowledge.get("future_work", "Not specified")
+        keywords = knowledge.get("keywords", "Not specified")
 
         prompt = f"""
 You are a senior IEEE research paper writer.
@@ -30,25 +40,25 @@ AVAILABLE EVIDENCE
 ------------------
 
 Problems:
-{knowledge["problems"]}
+{problems}
 
 Methods:
-{knowledge["methods"]}
+{methods}
 
 Datasets:
-{knowledge["datasets"]}
+{datasets}
 
 Results:
-{knowledge["results"]}
+{results}
 
 Limitations:
-{knowledge["limitations"]}
+{limitations}
 
 Future Work:
-{knowledge["future_work"]}
+{future_work}
 
 Keywords:
-{knowledge["keywords"]}
+{keywords}
 
 WRITING RULES
 -------------
@@ -83,6 +93,7 @@ Return only the section content.
             response = llm.generate(prompt)
 
             if not response:
+                print(f"Report Agent Warning: empty response for section '{section}'")
                 return ""
 
             # Remove accidental headings returned by the LLM
@@ -120,6 +131,20 @@ Return only the section content.
 
             return "\n".join(cleaned).strip()
 
+        except GroqQuotaExceededError as e:
+            print(
+                f"Report Agent: Groq quota exhausted while writing "
+                f"'{section}' — falling back to raw context. {e}"
+            )
+            return ""
+
+        except KeyError as e:
+            # Missing field in `knowledge` dict — should no longer happen
+            # since we use .get() above, but keep this for visibility if
+            # the dict shape changes again in future.
+            print(f"Report Agent Error (missing knowledge key) for section '{section}':", e)
+            return ""
+
         except Exception as e:
-            print("Report Agent Error:", e)
+            print(f"Report Agent Error for section '{section}':", e)
             return ""

@@ -1,4 +1,4 @@
-from app.llm.groq_client import GroqClient
+from app.llm.groq_client import GroqClient, GroqQuotaExceededError
 
 
 class ResearchGapService:
@@ -48,4 +48,21 @@ Return JSON.
 {context}
 """
 
-        return self.llm.generate(prompt)
+        try:
+            return self.llm.generate(prompt)
+
+        except GroqQuotaExceededError as e:
+            print(f"Research gap analysis skipped — Groq quota exhausted: {e}")
+            return (
+                "Research gap analysis unavailable: the AI provider's daily "
+                "token quota was reached while generating this report. "
+                "Please regenerate this section later once the quota resets, "
+                "or upgrade the Groq API plan."
+            )
+
+        except Exception as e:
+            print(f"Research gap analysis error: {e}")
+            return (
+                "Research gap analysis unavailable due to an unexpected "
+                f"error: {e}"
+            )

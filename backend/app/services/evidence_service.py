@@ -1,6 +1,6 @@
 import json
 
-from app.llm.groq_client import GroqClient
+from app.llm.groq_client import GroqClient, GroqQuotaExceededError
 
 llm = GroqClient()
 
@@ -54,6 +54,12 @@ Abstract:
 
             evidence = json.loads(response)
 
+        except GroqQuotaExceededError:
+            # Let this propagate — the caller (extract_many) needs to know
+            # the quota died so it can stop looping instead of retrying
+            # every remaining paper against a dead API.
+            raise
+
         except Exception as e:
 
             print("Evidence Extraction Error:", e)
@@ -80,12 +86,30 @@ Abstract:
     def extract_many(papers):
 
         results = []
+        quota_hit = False
 
         for paper in papers:
 
-            item = EvidenceService.extract(paper)
+            try:
+                item = EvidenceService.extract(paper)
+
+            except GroqQuotaExceededError as e:
+                print(
+                    f"Evidence extraction stopped early — Groq quota "
+                    f"exhausted after {len(results)}/{len(papers)} "
+                    f"paper(s): {e}"
+                )
+                quota_hit = True
+                break
 
             if item:
                 results.append(item)
+
+        if quota_hit and not results:
+            print(
+                "Warning: no evidence could be extracted before the quota "
+                "ran out. The report will rely on whatever knowledge base "
+                "entries can still be built (likely very sparse)."
+            )
 
         return results

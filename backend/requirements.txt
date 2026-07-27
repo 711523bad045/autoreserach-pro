@@ -8,7 +8,5 @@ pydantic
 python-dotenv
 sentence-transformers
 faiss-cpu
-beautifulsoup4
 requests
 reportlab
-psycopg2-binary
