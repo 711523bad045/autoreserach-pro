@@ -1,188 +1,217 @@
--> AutoResearch Pro — Autonomous Research Assistant
+# AutoResearch Pro
 
-  *AutoResearch Pro is an AI-powered autonomous research assistant that automatically:
-  *Searches trusted sources on the web (Wikipedia)
-  *Scrapes and cleans the content
-  *Splits the data into intelligent chunks
-  *Uses an LLM (Ollama Qwen2.5) to generate a full structured research report
-  *Stores everything in a database
-  *Allows asking questions from the generated research
-  *Can convert the report into IEEE research paper format
-<img width="1919" height="963" alt="Screenshot 2026-01-27 141953" src="https://github.com/user-attachments/assets/42c89454-27c6-42e7-9b2d-b0c15428f2cf" />
-<img width="1890" height="979" alt="Screenshot 2026-01-27 141938" src="https://github.com/user-attachments/assets/aa439307-9396-4184-8929-b77b165ef454" />
-<img width="1919" height="965" alt="Screenshot 2026-01-27 141902" src="https://github.com/user-attachments/assets/4adeda8f-c479-4727-bfe3-a0fea67ad417" />
-<img width="1907" height="902" alt="Screenshot 2026-01-27 141850" src="https://github.com/user-attachments/assets/400ab794-38d1-46a6-82bd-381fb4a66736" />
-<img width="1914" height="970" alt="Screenshot 2026-01-27 141820" src="https://github.com/user-attachments/assets/e10fc56c-d5aa-4095-8fc7-276f65d6674c" />
-<img width="1919" height="916" alt="Screenshot 2026-01-27 141803" src="https://github.com/user-attachments/assets/d6934ced-07c0-40c1-b86d-0712df03c255" />
+### AI-Powered Research Report Generator
 
+AutoResearch Pro is a full-stack AI research assistant designed to automate the process of discovering relevant research papers, analyzing research information, and generating structured research reports.
 
+The system provides a workspace where users can create research projects, enter a research topic and objective, generate reports, inspect research sources, view individual sections, and preview the generated report in an IEEE-style format.
 
-This system automates the entire research workflow from topic → sources → content → report.
+---
 
--> Why This Project?
+## Overview
 
-- Traditional research takes:
- *Hours of searching
- *Reading multiple websites
- *Copying content
- *Structuring the document
- *Writing the report manually
-AutoResearch Pro does all of this automatically.
-Just enter a topic → the system generates a complete research report.
+Research work normally requires searching through multiple academic sources, reading papers, identifying important findings, organizing information, and preparing a structured report.
 
--> System Architecture (High Level)
-User → Frontend → FastAPI Backend → Web Search → Web Scraping → Chunking → LLM → Database → UI
+AutoResearch Pro aims to simplify this workflow by combining:
 
-- Complete Workflow (Step by Step)
- Step 1: Topic Input
-         *User enters a research topic in the UI, for example:
-         *"Artificial Intelligence in Healthcare"
+- Academic research discovery
+- Semantic research retrieval
+- Research-paper ranking
+- Evidence extraction
+- Knowledge-base processing
+- AI-assisted report generation
+- Research gap analysis
+- Tables and diagrams
+- IEEE-style report formatting
+- PDF and Word export
+- Report-based AI assistance
 
- Step 2: Web Search (Wikipedia)
- 
-  The system searches Wikipedia for:
-        *Trusted
-        *Clean
-        *High-quality sources
-        *Multiple relevant URLs are collected.
-  Why Wikipedia?
-        *Structured
-        *Reliable
-        *Clean HTML
-  Perfect for research base content
+---
 
- Step 3: Web Scraping (BeautifulSoup4)
-   Each URL is downloaded using BeautifulSoup4
-   The system extracts:
-  Main content
-     *Removes menus, ads, useless text
-     *The clean text is stored in the database as Sources
+## Key Features
 
- Step 4: Chunking & Preprocessing
-     *Large text is split into smaller chunks (~300–350 words each).
- Why chunking?
-     *Small LLM model (0.5B) has context limits
- Chunking:
-    *Preserves quality
-    *Improves accuracy
-    *Avoids hallucination
-    *Makes generation more stable
-    *These chunks are saved in the database.
+### Research Discovery
 
- Step 5: RAG (Retrieval Augmented Generation)
-    *This project uses RAG architecture:
-    *The LLM does NOT answer from memory alone.
+The system searches for research papers related to the user's topic using academic research APIs.
 
-  Instead:
-     *Relevant chunks are selected
-     *Injected into the prompt
-     *LLM generates content using real scraped data
-  This:
-    *Increases factual accuracy
-    *Reduces hallucination
-    *Makes output grounded in real sources
+Primary research sources include:
 
- Step 6: Report Generation (Ollama Qwen2.5:0.5B)
-    The system uses:
-      *qwen2.5:0.5b
-    Why this model?
-      *Very fast
-      *Runs locally (no API cost)
-      *Good enough for structured generation
+- Semantic Scholar
+- OpenAlex
 
-- Low RAM usage
+The system is designed with a fallback mechanism so that OpenAlex can be used when the primary research provider is unavailable.
 
-    Tradeoff:
-      *Slightly lower language quality
-      *But we compensate using:
-      *Chunking
-      *Strong prompts
-      *RAG
+---
 
- Step 7: Section-by-Section Writing
-      *The report is generated in parts:
-      *Introduction
-      *Background
-      *Core Concepts
-      *Architecture
-      *Applications
-      *Advantages & Limitations
-      *Conclusion
+### Research Paper Ranking
 
-Each section:
-    *Uses chunk context
-    *Is appended to the final report
-    *Is saved to the database
+Retrieved papers can be processed and ranked according to research relevance and other available paper information.
 
- Step 8: Source Storage
+This helps the system prioritize useful research sources before generating the final report.
 
-  All scraped sources are:
-    *Stored in DB
-    *Displayed in UI
-    *Added to the report as references
+---
 
- Step 9: Ask Questions From Report
+###  Evidence-Based Research Processing
 
-  There is a Q&A Bot:
-    *Uses the same qwen2.5:0.5b model
-    *Answers only from the generated report
-    *Uses report content as context
-    *Fast and local
+Research information is processed into structured evidence such as:
 
- Step 10: Convert to IEEE Format
+- Research problem
+- Methodology
+- Dataset
+- Results
+- Limitations
+- Future work
+- Keywords
 
-  The system can convert the report into:
-     *Proper IEEE research paper format
-    Using:
-    *qwen2.5:1.5b (higher quality model)
-    This:
-     *Removes unwanted text
-     *Makes language formal
-    Structures paper into:
-     *Abstrac
-     *Keywords
-     *Introduction
-     *Sections
-     *Conclusion
-     *References
+This structured information can then be used as context for AI-assisted report generation.
 
--> Tech Stack
-   Backend
-    *Python
-    *FastAPI
-    *SQLAlchemy
-    *MySQL
-    *BeautifulSoup4
-    *Ollama
+---
 
-   AI Models
-    *qwen2.5:0.5b → Fast generation   
-    *qwen2.5:1.5b → High quality IEEE conversion
+### Knowledge Base
 
-   Frontend
-    *React
-    *Axios
+AutoResearch Pro organizes extracted research information into a knowledge base.
 
-   Database Tables
-     *research_projects → Topics
-     *reports → Generated reports
-     *sources → Scraped websites
-     *chunks → Chunked content
-     *report_sections → Split sections
-     *ieee_reports → IEEE formatted papers
-<img width="1862" height="957" alt="Screenshot 2026-01-27 104101" src="https://github.com/user-attachments/assets/9cec0d5e-8934-4151-bdbd-87ca175313c0" />
+The knowledge base can contain information related to:
 
-   Key Features
-    * Fully automatic research
-    * Uses real web data
-    * RAG-based generation
-    * Local LLM (No API cost)
-    * Fast generation
-    * IEEE conversion
-    * Q&A chatbot
-    * Source tracking
-    * Database persistence
+- Problems
+- Methods
+- Datasets
+- Results
+- Limitations
+- Future research
+- Keywords
 
+This provides structured research context for downstream report generation.
 
+---
 
+###  AI Research Agent
 
+The project uses an AI agent workflow to process research information and generate academic content.
+
+The LLM layer is separated from the rest of the application, making the architecture easier to maintain and extend.
+
+---
+
+###  AI-Generated Tables, Charts and Diagrams
+
+The backend contains dedicated services and agents for research visuals, including:
+
+- Tables
+- Charts
+- Mermaid diagrams
+- Research workflow diagrams
+- Architecture diagrams
+- Figures
+
+These components are designed to make generated research reports more informative and structured.
+
+---
+
+###  IEEE Report Preview
+
+Generated research can be displayed in an IEEE-style report interface.
+
+The application provides an IEEE preview containing:
+
+- Research title
+- Author information
+- Abstract
+- Keywords
+- Structured research content
+- Multi-column academic layout
+
+---
+
+###  Ask About the Report
+
+The report interface includes an AI assistant that allows users to ask questions about the generated report.
+
+Users can ask about:
+
+- Findings
+- Methods
+- Research sections
+- Report content
+
+The assistant is designed to ground responses in the generated research content.
+
+---
+
+###  Export
+
+The application provides export options for generated reports.
+
+Supported formats include:
+
+- Word
+- PDF
+
+---
+
+## <img width="1917" height="1045" alt="Screenshot 2026-09-01 093344" src="https://github.com/user-attachments/assets/7f3008c6-8204-4337-ba51-2eb47af834dd" />
+<img width="1917" height="1017" alt="Screenshot 2026-09-01 093352" src="https://github.com/user-attachments/assets/f6ad737a-e21b-451d-bcf2-ad301153ae26" />
+<img width="1906" height="905" alt="Screenshot 2026-09-01 093530" src="https://github.com/user-attachments/assets/d1e883cd-a46b-4728-831c-af3cd5c244a8" />
+<img width="1917" height="942" alt="Screenshot 2026-09-01 093540" src="https://github.com/user-attachments/assets/b5bb5947-fda9-41cd-9d4d-2c28d60ebf3d" />
+<img width="1917" height="951" alt="Screenshot 2026-09-01 093606" src="https://github.com/user-attachments/assets/5de4b5ed-8329-4613-9719-e91da8ecb5b2" />
+Application Workflow
+
+```text
+                    User
+                     │
+                     ▼
+             Create Research Project
+                     │
+                     ▼
+              Enter Research Topic
+                     │
+                     ▼
+             Define Research Objective
+                     │
+                     ▼
+            Specify Report Requirements
+                     │
+                     ▼
+             Research Discovery
+                     │
+          ┌──────────┴──────────┐
+          ▼                     ▼
+   Semantic Scholar           OpenAlex
+          │                     │
+          └──────────┬──────────┘
+                     ▼
+              Paper Ranking
+                     │
+                     ▼
+             Evidence Extraction
+                     │
+                     ▼
+              Knowledge Base
+                     │
+                     ▼
+              Research Gap
+                     │
+                     ▼
+             Report Planning
+                     │
+                     ▼
+                AI Agent
+                     │
+                     ▼
+             Report Generation
+                     │
+          ┌──────────┼──────────┐
+          ▼          ▼          ▼
+       Sections    Tables     Figures
+          │          │          │
+          └──────────┼──────────┘
+                     ▼
+             IEEE Formatting
+                     │
+          ┌──────────┴──────────┐
+          ▼                     ▼
+     Web Report             IEEE Preview
+          │
+          ├──────────► Word
+          │
+          └──────────► PDF
